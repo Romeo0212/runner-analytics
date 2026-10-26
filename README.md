@@ -1,40 +1,44 @@
+[🇮🇹 Leggi in Italiano](README-it.md)
+
+> **Note:** The application interface is currently available in Italian only, though the data consists mostly of universally understandable numbers and metrics.
+
 # 🏃‍♂️ GPX Runner Analytics & Strava Race Predictor
 
-Una web application **100% client-side** (zero backend, zero tracciamento) per analizzare tracce GPS di corsa (`.gpx`) e prevedere i tempi gara su **5 km, 10 km, Mezza Maratona, Maratona** e distanze personalizzate partendo dall'archivio esportato da **Strava** (`.zip` o file `.tcx`/`.gpx`).
+A **100% client-side** web application (zero backend, zero tracking) to analyze running GPS tracks (`.gpx`) and predict race times for **5k, 10k, Half Marathon, Marathon**, and custom distances starting from a **Strava** export archive (`.zip` or `.tcx`/`.gpx` files)[cite: 6].
 
-🌐 **Provala subito online:** [romeo0212.github.io/runner-analytics](https://romeo0212.github.io/runner-analytics/)
+🌐 **Try it live:** [romeo0212.github.io/runner-analytics](https://romeo0212.github.io/runner-analytics/)[cite: 6]
 
-> ⚡ **Filosofia del Progetto:**  
-> Oltre all'utilizzo diretto tramite il link, l'intera applicazione è racchiusa in un **unico file `index.html`** (che integra HTML, Tailwind CSS e JavaScript). Questa scelta architetturale garantisce la **massima portabilità**: chiunque può scaricare il file ed eseguirlo offline nel proprio browser, potendo così ispezionare, personalizzare o espandere liberamente il codice senza dover configurare alcun ambiente di sviluppo. Il tool è nato in modalità *vibe coding*, iterando il codice a stretto contatto con le metriche reali della fisiologia sportiva.
-
----
-
-## ✨ Funzionalità Principali
-
-### 1. 📊 Analisi Singolo GPX (`Modalità 1`)
-* **Riepilogo Istantaneo & Tracciato GPS:** Calcolo di distanza, tempo totale, passo medio, dislivello positivo smussato ($D+$) e visualizzazione mappa interattiva su Leaflet/OpenStreetMap.
-* **Taglio Inizio/Fine (Trimming):** Slider interattivi per tagliare riscaldamento iniziale, soste al semaforo o passeggiata finale per distanza o per tempo.
-* **Split Regolari & Costruttore Fartlek:** Analisi per frazioni fisse (`1 km`, `500 m`, `400 m`, `1 min`, ecc.) oppure costruzione di allenamenti misti (es. *2 km Riscaldamento + 6×(1' Veloce + 1' Recupero) + Defaticamento*).
-* **Indice di Oscillazione Interna ($\pm\%$):** Misura la regolarità del passo *all'interno* di ciascun singolo blocco, distinguendo una ripetuta corsa a ritmo costante da una corsa a strappi.
-
-### 2. 🏆 Proiezioni Gara da Archivio Strava (`Modalità 2`)
-* **Lettura Diretta dell'Export `.zip` di Strava:** Estrazione in-memory nel browser tramite `JSZip` e `pako` (decompressione automatica di `activities.csv` e delle tracce `.tcx.gz` / `.gpx.gz`).
-* **Separazione Multi-Sport & Cross-Training:** Scarta automaticamente gli altri sport dal calcolo del passo gara, ma accredita il volume aerobico del **Calcio / Cross-Training (pesato al 65%)** e dei riscaldamenti brevi ($< 2\text{ km}$) nel calcolo della tenuta muscolare sulle lunghe distanze.
-* **Rilevatore Ciclico di Fartlek & Segmenti Continui:** Scansiona le tracce secondo per secondo per estrarre sia i migliori segmenti continui ($\ge 1\text{ km}$) sia gli allenamenti a intervalli brevi (tramite la mediana delle ripetute distinte), evitando che il riscaldamento o i recuperi lenti abbassino la stima del potenziale aerobico.
+> ⚡ **Project Philosophy (Single-File & Vibe Coded):**  
+> Besides using the app directly via the link above, the entire application is contained within a **single `index.html` file** (which integrates HTML, Tailwind CSS, and JavaScript). This architectural choice guarantees **maximum portability**: anyone can download the file and run it offline in their browser, making it incredibly easy to inspect, customize, or freely expand the code without setting up any development environment. The tool was born through *vibe coding*, iterating the code in close contact with real sports physiology metrics[cite: 6].
 
 ---
 
-## 🧮 Modello Matematico e Fisiologico
+## ✨ Main Features[cite: 6]
 
-Il motore predittivo combina quattro modelli classici della letteratura dell'endurance per evitare sia le stime troppo pessimistiche (causate dalla media con i fondi lenti) sia i falsi positivi (causati da picchi GPS isolati).
+### 1. 📊 Single GPX Analysis (`Mode 1`)[cite: 6]
+* **Instant Summary & GPS Track:** Calculation of distance, total time, average pace, smoothed positive elevation gain ($D+$), and interactive map visualization via Leaflet/OpenStreetMap[cite: 6].
+* **Start/End Trimming:** Interactive sliders to crop out the initial warmup, traffic light stops, or final cooldown walks by distance or time[cite: 6].
+* **Regular Splits & Fartlek Builder:** Analysis by fixed distances (`1 km`, `500 m`, `400 m`, `1 min`, etc.) or custom mixed workouts (e.g., *2 km Warmup + 6×(1' Fast + 1' Recovery) + Cooldown*)[cite: 6].
+* **Internal Variability Index ($\pm\%$):** Measures pace consistency *within* each individual block, distinguishing a steady-paced interval from an uneven, surging run[cite: 6].
 
-### 1. Smussamento Altimetrico e GAP (Grade Adjusted Pace)
-L'altitudine GPS grezza viene filtrata con una media mobile a 7 punti e una soglia di isteresi di $3.5\text{ m}$ per eliminare il rumore satellitare in pianura. Il passo viene poi convertito in **GAP** (passo equivalente in pianura) secondo il modello metabolico di Minetti (~$3.3\text{ s/km}$ per ogni $10\text{ m}$ di $D+$ al km):
+### 2. 🏆 Strava Archive Race Projections (`Mode 2`)[cite: 6]
+* **Direct Strava `.zip` Export Reading:** In-memory browser extraction using `JSZip` and `pako` (automatic decompression of `activities.csv` and `.tcx.gz` / `.gpx.gz` tracks)[cite: 6].
+* **Multi-Sport & Cross-Training Separation:** Automatically discards other sports from the race pace calculation, but credits the aerobic volume of **Soccer / Cross-Training (weighted at 65%)** and short warmups ($< 2\text{ km}$) when calculating muscular endurance for long distances[cite: 6].
+* **Cyclic Fartlek & Continuous Segment Detector:** Scans tracks second-by-second to extract both the best continuous segments ($\ge 1\text{ km}$) and short interval workouts (via the median of distinct repetitions), preventing warmups or slow recoveries from lowering the estimated aerobic potential[cite: 6].
 
-$$\text{GAP}_{\text{sec/km}} = \text{Passo}_{\text{grezzo}} - \left( \frac{D+_{\text{totale}}}{D_{\text{km}} \cdot 10} \right) \times 3.3$$
+---
 
-### 2. Stima della Cilindrata Aerobica ($\text{VDOT}$ di Daniels & Gilbert)
-Per ogni prestazione di distanza $D$ (in metri) e tempo equivalente in piano $T$ (in minuti), con velocità $v = D / T$ (in $\text{m/min}$), il consumo di ossigeno teorico ($\text{VO}_2$) e la frazione sostenibile ($\text{\%VO}_2\max$) sono calcolati tramite le equazioni di Daniels & Gilbert:
+## 🧮 Mathematical and Physiological Model[cite: 6]
+
+The predictive engine combines four classic endurance literature models to avoid both overly pessimistic estimates (caused by averaging with easy runs) and false positives (caused by isolated GPS spikes)[cite: 6].
+
+### 1. Elevation Smoothing and GAP (Grade Adjusted Pace)[cite: 6]
+Raw GPS elevation is filtered with a 7-point moving average and a $3.5\text{ m}$ hysteresis threshold to eliminate satellite noise on flat terrain[cite: 6]. The pace is then converted into **GAP** (Grade Adjusted Pace) according to Minetti's metabolic model (~$3.3\text{ s/km}$ per $10\text{ m}$ of $D+$ per km)[cite: 6]:
+
+$$\text{GAP}_{\text{sec/km}} = \text{Raw\_Pace} - \left( \frac{\text{Total\_}D+}{\text{Distance}_{\text{km}} \cdot 10} \right) \times 3.3$$
+
+### 2. Aerobic Engine Estimation ($\text{VDOT}$ by Daniels & Gilbert)[cite: 6]
+For every performance of distance $D$ (in meters) and equivalent flat time $T$ (in minutes), with velocity $v = D / T$ (in $\text{m/min}$), the theoretical oxygen consumption ($\text{VO}_2$) and sustainable fraction ($\text{\%VO}_2\max$) are calculated using the Daniels & Gilbert equations[cite: 6]:
 
 $$\text{VO}_2(v) = -4.60 + 0.182258 \cdot v + 0.000104 \cdot v^2$$
 
@@ -42,28 +46,28 @@ $$\%\text{VO}_2\max(T) = 0.8 + 0.1894393 \cdot e^{-0.012778 \cdot T} + 0.2989558
 
 $$\text{VDOT} = \frac{\text{VO}_2(v)}{\%\text{VO}_2\max(T)}$$
 
-*(Se sono presenti i dati di frequenza cardiaca media $\text{FC}_{\text{media}}$ rispetto a $\text{FC}_{\max}$, gli sforzi sub-massimali corsi tra il $65\%$ e il $91\%$ della $\text{FC}_{\max}$ ricevono un accredito proporzionale alla riserva cardiaca).*
+*(If average heart rate data $\text{HR}_{\text{avg}}$ compared to $\text{HR}_{\max}$ is present, sub-maximal efforts run between $65\%$ and $91\%$ of $\text{HR}_{\max}$ receive a proportional credit based on heart rate reserve)*[cite: 6].
 
-### 3. Rilevamento Ciclico Fartlek (Mediana delle Ripetute) e Bonus Costanza
-Per evitare che gli allenamenti a intervalli vengano penalizzati dalle fasi di recupero lento:
-* La traccia viene suddivisa in finestre consecutive di $30\text{ s}$ basate sulla distanza geodetica continua (formula dell'emisenoverso / *Haversine*).
-* Una sessione viene riconosciuta come **Fartlek** solo se presenta $\ge 3$ cicli distinti di spinta/recupero in cui i blocchi veloci sono almeno il $12\%$ più rapidi della mediana dell'uscita e adiacenti a blocchi di recupero almeno il $30\%$ più lenti.
-* Il passo delle ripetute viene estratto tramite la **mediana** dei blocchi veloci (robusta agli outlier del GPS) e convertito in passo $10\text{ km}$ equivalente.
-* L'indice $\text{VDOT}_{\text{eff}}$ finale è ancorato al **Picco Base Certificato** (con decadimento temporale oltre i 21 giorni) potenziato da un **Bonus Costanza** (fino a $+1.5\%$) derivato dai migliori allenamenti di qualità e dal volume settimanale.
+### 3. Cyclic Fartlek Detection (Repetition Median) and Consistency Bonus[cite: 6]
+To prevent interval workouts from being penalized by slow recovery phases[cite: 6]:
+* The track is split into consecutive $30\text{ s}$ windows based on continuous geodetic distance (Haversine formula)[cite: 6].
+* A session is recognized as a **Fartlek** only if it features $\ge 3$ distinct push/recovery cycles where fast blocks are at least $12\%$ faster than the run's median and adjacent to recovery blocks at least $30\%$ slower[cite: 6].
+* The repetition pace is extracted via the **median** of the fast blocks (robust to GPS outliers) and converted into an equivalent $10\text{ km}$ pace[cite: 6].
+* The final $\text{VDOT}_{\text{eff}}$ index is anchored to the **Certified Base Peak** (with time decay after 21 days), boosted by a **Consistency Bonus** (up to $+1.5\%$) derived from the best quality workouts and weekly volume[cite: 6].
 
-### 4. Proiezione sulle Distanze con Esponente Dinamico di Riegel
-Dal tempo base sui $10\text{ km}$ ($T_{10\text{k}}$, ricavato invertendo numericamente per bisezione la funzione $\text{VDOT}$), il tempo $T_2$ su una distanza target $D_2$ viene calcolato con la legge di potenza di Peter Riegel:
+### 4. Distance Projection with Dynamic Riegel Exponent[cite: 6]
+From the base $10\text{ km}$ time ($T_{10\text{k}}$, obtained by numerically reversing the $\text{VDOT}$ function via bisection), the time $T_2$ for a target distance $D_2$ is calculated using Peter Riegel's power law[cite: 6]:
 
 $$T_2 = T_{10\text{k}} \cdot \left( \frac{D_2}{10000} \right)^k$$
 
-dove l'**esponente di fatica $k$** non è fisso al valore standard $1.06$ (valido solo per atleti d'élite ad alto chilometraggio), ma viene adattato dinamicamente in base al **Volume Settimanale Equivalente** ($V_{\text{eq}} = \text{km}_{\text{corsa}} + 0.65 \cdot \text{km}_{\text{calcio/cross}}$):
+where the **fatigue exponent $k$** is not fixed at the standard $1.06$ value (which only applies to elite, high-mileage athletes), but dynamically adapts based on the **Equivalent Weekly Volume** ($V_{\text{eq}} = \text{run}_{\text{km}} + 0.65 \cdot \text{soccer/cross}_{\text{km}}$)[cite: 6]:
 
 $$k = \text{clamp}\Big( 1.06 + \max\big(0,\; (45 - V_{\text{eq}}) \cdot 0.0005\big),\; 1.055,\; 1.090 \Big)$$
 
-Per le distanze superiori ai $15\text{ km}$ (Mezza Maratona e Maratona), se il lungo massimo recente ($L_{\max}$) è inferiore al $68\%$ della distanza di gara, viene applicato un ulteriore coefficiente prudenziale di tenuta muscolare.
+For distances over $15\text{ km}$ (Half Marathon and Marathon), if the recent longest run ($L_{\max}$) is less than $68\%$ of the race distance, an additional muscular endurance prudential coefficient is applied[cite: 6].
 
 ---
 
-## 🔒 Privacy
+## 🔒 Privacy[cite: 6]
 
-L'applicazione non utilizza alcun server di backend: l'intero parsing dei file `.zip`, `.csv`, `.gpx` e `.tcx` avviene localmente nel browser dell'utente. Nessun file viene caricato in rete.
+The application does not use any backend server: the entire parsing of `.zip`, `.csv`, `.gpx`, and `.tcx` files happens locally in the user's browser. No files are uploaded to the internet[cite: 6].
