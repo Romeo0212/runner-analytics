@@ -2,8 +2,10 @@
 
 Una web application **100% client-side** (zero backend, zero tracciamento) per analizzare tracce GPS di corsa (`.gpx`) e prevedere i tempi gara su **5 km, 10 km, Mezza Maratona, Maratona** e distanze personalizzate partendo dall'archivio esportato da **Strava** (`.zip` o file `.tcx`/`.gpx`).
 
-> ⚡ **Nota sullo sviluppo (Vibe Coded Project):**  
-> Questa dashboard è stata realizzata in modalità *vibe coding* — combinando architettura software, dominio sportivo/fisiologico della corsa e iterazione assistita da AI per calibrare gli algoritmi su dati reali di allenamento e gara.
+🌐 **Provala subito online:** [romeo0212.github.io/runner-analytics](https://romeo0212.github.io/runner-analytics/)
+
+> ⚡ **Filosofia del Progetto:**  
+> Oltre all'utilizzo diretto tramite il link, l'intera applicazione è racchiusa in un **unico file `index.html`** (che integra HTML, Tailwind CSS e JavaScript). Questa scelta architetturale garantisce la **massima portabilità**: chiunque può scaricare il file ed eseguirlo offline nel proprio browser, potendo così ispezionare, personalizzare o espandere liberamente il codice senza dover configurare alcun ambiente di sviluppo. Il tool è nato in modalità *vibe coding*, iterando il codice a stretto contatto con le metriche reali della fisiologia sportiva.
 
 ---
 
