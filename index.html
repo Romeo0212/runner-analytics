@@ -1,0 +1,2059 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPX & Strava Runner Analytics</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    input[type="range"] { accent-color: #10b981; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- TOP NAVBAR -->
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-slate-900 text-xl shadow">🏃</div>
+        <div>
+          <h1 class="font-extrabold text-lg leading-tight tracking-tight">GPX Runner <span class="text-emerald-400">Analytics</span></h1>
+          <p class="text-xs text-slate-400">Analisi GPX singola &amp; Proiezioni Gara da Archivio Strava</p>
+        </div>
+      </div>
+      <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700">
+        <button id="tabBtnSingle" onclick="switchAppMode('single')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-emerald-500 text-slate-950 shadow">
+          📊 Analisi Singolo GPX
+        </button>
+        <button id="tabBtnPredictor" onclick="switchAppMode('predictor')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white">
+          🏆 Proiezioni Gara (ZIP Strava)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl w-full mx-auto px-4 py-6 flex-1 space-y-6">
+
+    <!-- ========================================================================= -->
+    <!-- MODALITÀ 1: ANALISI SINGOLO GPX                                           -->
+    <!-- ========================================================================= -->
+    <div id="modeSingleContainer" class="space-y-6">
+
+      <!-- Top Bar Upload GPX -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">Carica Traccia GPX Singola</h2>
+          <p class="text-xs text-slate-500">Analizza passo medio, split personalizzati, Fartlek e tracciato GPS</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-sm transition inline-flex items-center gap-2">
+            <span>📂 Apri File GPX</span>
+            <input type="file" id="gpxFileInput" accept=".gpx,application/gpx+xml,text/xml,application/xml,*/*" class="hidden" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Banner di avviso Dati Temporali Mancanti -->
+      <div id="noTimeWarningBanner" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl shadow-sm">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">⚠️</span>
+          <div>
+            <h3 class="text-sm font-bold text-amber-900">Dati temporali non presenti. Verranno mostrati solo mappa e distanza.</h3>
+            <p class="text-xs text-amber-700 mt-0.5">Il file GPX caricato non contiene i tag <code class="bg-amber-100 px-1 py-0.5 rounded">&lt;time&gt;</code>. Il calcolo del passo e degli split temporali è disattivato.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State Singolo GPX -->
+      <div id="singleEmptyState" class="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-10 text-center space-y-3">
+        <div class="text-4xl">📍</div>
+        <h3 class="text-lg font-bold text-slate-700">Nessun file GPX caricato</h3>
+        <p class="text-sm text-slate-500 max-w-md mx-auto">Clicca su <strong>"Apri File GPX"</strong> qui sopra per selezionare un'attività di corsa ed esplorare il passo medio per qualsiasi distanza, tempo o struttura Fartlek.</p>
+      </div>
+
+      <!-- Contenuto Analisi Singolo GPX -->
+      <div id="singleDashboardContent" class="hidden space-y-6">
+
+        <!-- Riepilogo Card -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Attività</span>
+            <p id="statName" class="text-sm sm:text-base font-extrabold text-slate-800 truncate mt-1">—</p>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Distanza</span>
+            <p id="statDist" class="text-xl sm:text-2xl font-extrabold text-emerald-600 mt-0.5">0.00 <span class="text-xs font-normal text-slate-500">km</span></p>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tempo Totale</span>
+            <p id="statTime" class="text-xl sm:text-2xl font-extrabold text-slate-800 mt-0.5">--:--</p>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Passo Medio</span>
+            <p id="statPace" class="text-xl sm:text-2xl font-extrabold text-emerald-600 mt-0.5">--:-- <span class="text-xs font-normal text-slate-500">/km</span></p>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 col-span-2 sm:col-span-1">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Dislivello (D+)</span>
+            <p id="statElev" class="text-xl sm:text-2xl font-extrabold text-slate-800 mt-0.5">0 <span class="text-xs font-normal text-slate-500">m</span></p>
+          </div>
+        </div>
+
+        <!-- Pannello Taglia Attività (Inizio / Fine) -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">✂️ Taglia Attività (Inizio / Fine)</h3>
+              <p class="text-xs text-slate-500">Rimuovi tratti iniziali o finali (es. pausa semaforo o passeggiata finale)</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="trimModeSelect" onchange="onTrimModeChange()" class="text-xs font-semibold bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                <option value="dist">Taglia per Distanza (km)</option>
+                <option value="time" id="trimModeTimeOption">Taglia per Tempo (min)</option>
+              </select>
+              <button onclick="resetTrim()" class="text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition">
+                Ripristina Tutto
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <div class="flex justify-between text-xs font-semibold">
+                <span class="text-slate-600">Inizio Attività:</span>
+                <span id="trimStartLabel" class="text-emerald-700 font-bold">0.00 km</span>
+              </div>
+              <input type="range" id="trimStartSlider" min="0" max="100" step="0.01" value="0" oninput="onTrimSliderInput('start')" class="w-full" />
+              <div class="flex gap-1.5 flex-wrap">
+                <button onclick="nudgeTrim('start', 100)" class="text-[11px] bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">+100m inizio</button>
+                <button onclick="nudgeTrim('start', -100)" class="text-[11px] bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">-100m inizio</button>
+              </div>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <div class="flex justify-between text-xs font-semibold">
+                <span class="text-slate-600">Fine Attività:</span>
+                <span id="trimEndLabel" class="text-emerald-700 font-bold">0.00 km</span>
+              </div>
+              <input type="range" id="trimEndSlider" min="0" max="100" step="0.01" value="100" oninput="onTrimSliderInput('end')" class="w-full" />
+              <div class="flex gap-1.5 flex-wrap">
+                <button onclick="nudgeTrim('end', -100)" class="text-[11px] bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">-100m fine</button>
+                <button onclick="nudgeTrim('end', 100)" class="text-[11px] bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">+100m fine</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pannello Configurazione Split e Fartlek -->
+        <div id="paceAnalysisSection" class="space-y-6">
+          <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 class="text-base font-bold text-slate-800">⚙️ Configurazione Intervalli e Unità di Misura</h3>
+                <p class="text-xs text-slate-500">Scegli un'unità fissa (km, metri, minuti) oppure costruisci un allenamento misto (es. Riscaldamento + Fartlek)</p>
+              </div>
+              <div class="flex bg-slate-100 p-1 rounded-xl">
+                <button id="btnModeUniform" onclick="setSplitMode('uniform')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
+                  Split Regolari
+                </button>
+                <button id="btnModeCustom" onclick="setSplitMode('custom')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                  Allenamento Misto / Fartlek
+                </button>
+              </div>
+            </div>
+
+            <!-- Modalità Uniforme -->
+            <div id="uniformConfigPanel" class="space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-semibold text-slate-500 mr-1">Preset rapidi:</span>
+                <button onclick="applyUniformPreset(1, 'km')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100">1 km</button>
+                <button onclick="applyUniformPreset(500, 'm')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">500 m</button>
+                <button onclick="applyUniformPreset(400, 'm')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">400 m</button>
+                <button onclick="applyUniformPreset(200, 'm')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">200 m</button>
+                <button onclick="applyUniformPreset(1, 'min')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">1 min</button>
+                <button onclick="applyUniformPreset(2, 'min')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">2 min</button>
+                <button onclick="applyUniformPreset(5, 'min')" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">5 min</button>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 pt-1">
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-semibold text-slate-600">Valore:</label>
+                  <input type="number" id="uniformValInput" value="1" min="0.05" step="any" onchange="recalculateSplits()" class="w-24 px-3 py-1.5 text-sm font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-semibold text-slate-600">Unità:</label>
+                  <select id="uniformUnitSelect" onchange="recalculateSplits()" class="px-3 py-1.5 text-sm font-semibold border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="km">Chilometri (km)</option>
+                    <option value="m">Metri (m)</option>
+                    <option value="min">Minuti (min)</option>
+                    <option value="sec">Secondi (sec)</option>
+                  </select>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-semibold text-slate-600">Etichette Asse X:</label>
+                  <select id="uniformLabelMode" onchange="recalculateSplits()" class="px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white">
+                    <option value="cumulative">Progressiva (1km, 2km, 3km...)</option>
+                    <option value="single">Singola (1km, 1km, 1km...)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modalità Custom / Fartlek -->
+            <div id="customConfigPanel" class="hidden space-y-4">
+              <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                <p class="text-xs font-bold text-slate-700">Aggiungi Blocco Singolo o Ripetute (es. 2km Riscaldamento, oppure 6x 1' Veloce + 1' Recupero)</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div class="bg-white p-3 rounded-lg border border-slate-200 flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-600 w-full">Blocco Singolo:</span>
+                    <input type="text" id="singleBlockLabel" placeholder="Es. Risc" class="w-24 px-2 py-1 text-xs border border-slate-300 rounded" />
+                    <input type="number" id="singleBlockVal" value="2" min="0.05" step="any" class="w-20 px-2 py-1 text-xs font-bold border border-slate-300 rounded" />
+                    <select id="singleBlockUnit" class="px-2 py-1 text-xs border border-slate-300 rounded bg-white">
+                      <option value="km">km</option>
+                      <option value="m">m</option>
+                      <option value="min">min</option>
+                      <option value="sec">sec</option>
+                    </select>
+                    <button onclick="addCustomBlock()" class="ml-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">+ Aggiungi</button>
+                  </div>
+
+                  <div class="bg-white p-3 rounded-lg border border-slate-200 flex flex-wrap items-center gap-1.5">
+                    <span class="text-xs font-bold text-slate-600 w-full">Serie Ripetute (Fartlek):</span>
+                    <input type="number" id="repCount" value="5" min="1" max="50" class="w-12 px-1.5 py-1 text-xs font-bold border border-slate-300 rounded text-center" />
+                    <span class="text-xs text-slate-500">× (</span>
+                    <input type="number" id="repWorkVal" value="1" step="any" class="w-14 px-1.5 py-1 text-xs font-bold border border-slate-300 rounded" />
+                    <select id="repWorkUnit" class="px-1 py-1 text-xs border border-slate-300 rounded bg-white">
+                      <option value="min">min</option>
+                      <option value="sec">sec</option>
+                      <option value="m">m</option>
+                      <option value="km">km</option>
+                    </select>
+                    <span class="text-xs text-slate-500">+</span>
+                    <input type="number" id="repRecVal" value="1" step="any" class="w-14 px-1.5 py-1 text-xs font-bold border border-slate-300 rounded" />
+                    <select id="repRecUnit" class="px-1 py-1 text-xs border border-slate-300 rounded bg-white">
+                      <option value="min">min</option>
+                      <option value="sec">sec</option>
+                      <option value="m">m</option>
+                      <option value="km">km</option>
+                    </select>
+                    <span class="text-xs text-slate-500">)</span>
+                    <button onclick="addFartlekSeries()" class="ml-auto bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition">+ Serie</button>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 pt-1" id="customBlocksList"></div>
+                <div class="flex justify-end">
+                  <button onclick="clearCustomBlocks()" class="text-xs text-red-600 hover:underline font-semibold">Svuota sequenza</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grafico Passo Medio per Segmento + Controlli Zoom -->
+          <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-base font-bold text-slate-800">📊 Grafico Passo Medio per Segmento</h3>
+                <p class="text-xs text-slate-500">Il passo medio (/km) è stampato su ogni colonna verde. Colonna più alta = passo più veloce.</p>
+              </div>
+              <span id="segmentsCountBadge" class="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">0 segmenti</span>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-slate-700">Scala Passo (Y):</span>
+                <label class="text-slate-600">Veloce (Cima):</label>
+                <input type="text" id="yAxisMinPace" value="3:00" onchange="updateChartFromControls()" class="w-16 px-2 py-1 font-bold border border-slate-300 rounded text-center" />
+                <label class="text-slate-600">Lento (Base):</label>
+                <input type="text" id="yAxisMaxPace" value="8:00" onchange="updateChartFromControls()" class="w-16 px-2 py-1 font-bold border border-slate-300 rounded text-center" />
+                <button onclick="setYAxisPreset('3:00','8:00')" class="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 font-semibold">3:00-8:00</button>
+                <button onclick="setYAxisPreset('3:30','6:30')" class="px-2 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 font-semibold">3:30-6:30</button>
+                <button onclick="setYAxisAuto()" class="px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 font-semibold">Auto</button>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <label class="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700">
+                  <input type="checkbox" id="hideShortRemainderChk" onchange="updateChartFromControls()" class="rounded text-emerald-600" />
+                  <span>Nascondi resto finale</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="relative h-80 sm:h-96 w-full">
+              <canvas id="paceChartCanvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabella Dettaglio + Mappa GPS -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div id="splitsTableContainer" class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 flex flex-col">
+            <h3 class="text-base font-bold text-slate-800 mb-3">📋 Tabella Dettaglio Intervalli</h3>
+            <div class="overflow-x-auto custom-scroll max-h-96 flex-1">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="border-b border-slate-200 text-slate-400 uppercase text-[11px]">
+                    <th class="py-2 px-2">#</th>
+                    <th class="py-2 px-2">Segmento</th>
+                    <th class="py-2 px-2">Distanza</th>
+                    <th class="py-2 px-2">Tempo</th>
+                    <th class="py-2 px-2">Passo Medio</th>
+                    <th class="py-2 px-2">Oscill. Int.</th>
+                    <th class="py-2 px-2">Disl.</th>
+                  </tr>
+                </thead>
+                <tbody id="splitsTableBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="mapCardContainer" class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 flex flex-col">
+            <h3 class="text-base font-bold text-slate-800 mb-3">🗺️ Tracciato GPS</h3>
+            <div id="leafletMap" class="w-full h-80 sm:h-96 rounded-xl border border-slate-200 z-0"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODALITÀ 2: PROIEZIONI GARA DA ARCHIVIO STRAVA (ZIP / MULTI-FILE)         -->
+    <!-- ========================================================================= -->
+    <div id="modePredictorContainer" class="hidden space-y-6">
+
+      <!-- Card Caricamento Archivio ZIP + Guida Rapida -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="space-y-1 max-w-2xl">
+            <span class="inline-block text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">100% Locale &amp; Privato nel Browser</span>
+            <h2 class="text-lg font-extrabold text-slate-800">Proiezione Tempi Gara da Archivio Strava</h2>
+            <p class="text-xs sm:text-sm text-slate-600">
+              Carica il file <strong>.zip</strong> esportato da Strava (oppure seleziona più file <code>.gpx</code> / <code>.tcx</code> insieme). Il motore usa l'<strong>Inviluppo di Potenza Aerobica + Rilevatore Ciclico Fartlek</strong>: fissa la tua base sul tuo miglior picco certificato, riconosce sia i segmenti continui (&ge; 1 km) sia i veri <strong>Fartlek a intervalli</strong> (solo quando rileva almeno 3 cicli di alternanza veloce/recupero lento), usa gli allenamenti di qualità come <strong>bonus di costanza</strong> e conteggia il Calcio al 65% nel volume settimanale.
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-sm transition inline-flex items-center gap-2">
+              <span>📦 Carica ZIP Strava (o più GPX/TCX)</span>
+              <input type="file" id="stravaArchiveInput" accept=".zip,.gpx,.tcx" multiple class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <details class="bg-slate-50 rounded-xl border border-slate-200 p-3 text-xs text-slate-600">
+          <summary class="font-bold text-slate-700 cursor-pointer select-none">💡 Come scaricare l'archivio completo delle tue attività da Strava?</summary>
+          <ol class="list-decimal list-inside space-y-1 mt-2 pl-1">
+            <li>Accedi a <strong>Strava.com</strong> da browser o app, vai su <strong>Impostazioni</strong> &rarr; <strong>Il mio account</strong>.</li>
+            <li>Scorri in basso fino a <strong>"Scarica o elimina il tuo account"</strong> e clicca su <strong>"Inizia"</strong>.</li>
+            <li>Al punto 2 clicca su <strong>"Richiedi il tuo archivio"</strong>. Riceverai via email un link per scaricare un file <code>export_xxxx.zip</code>.</li>
+            <li>Carica direttamente quel file <code>.zip</code> qui sopra senza nemmeno doverlo estrarre.</li>
+          </ol>
+        </details>
+
+        <!-- Parametri Modello Predittivo -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <label class="block text-[11px] font-bold uppercase text-slate-500">Finestra Temporale Analisi</label>
+            <select id="predWindowDays" onchange="recomputePredictionsFromLoaded()" class="mt-1 w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold">
+              <option value="42">Ultime 6 settimane (42 giorni)</option>
+              <option value="60">Ultimi 2 mesi (60 giorni)</option>
+              <option value="90" selected>Ultimi 3 mesi (90 giorni - Consigliato)</option>
+              <option value="180">Ultimi 6 mesi (180 giorni)</option>
+              <option value="365">Ultimo anno (365 giorni)</option>
+              <option value="99999">Tutte le corse disponibili</option>
+            </select>
+          </div>
+
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <label class="block text-[11px] font-bold uppercase text-slate-500">Peso Recenza (Half-Life)</label>
+            <select id="predHalfLifeDays" onchange="recomputePredictionsFromLoaded()" class="mt-1 w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold">
+              <option value="21">Molto aggressivo (emivita 21 gg)</option>
+              <option value="35" selected>Bilanciato (emivita 35 gg)</option>
+              <option value="60">Progressivo (emivita 60 gg)</option>
+            </select>
+          </div>
+
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <label class="block text-[11px] font-bold uppercase text-slate-500">FC Massima (Usata se hai fascia/cardio)</label>
+            <div class="flex items-center gap-2 mt-1">
+              <input type="number" id="predMaxHrInput" value="195" min="140" max="220" onchange="recomputePredictionsFromLoaded()" class="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold" />
+              <span class="text-xs text-slate-500 font-semibold">bpm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra di stato caricamento ZIP -->
+        <div id="zipProgressContainer" class="hidden bg-slate-100 p-3 rounded-xl border border-slate-200 space-y-1.5">
+          <div class="flex justify-between text-xs font-bold text-slate-700">
+            <span id="zipProgressText">Lettura archivio in corso...</span>
+            <span id="zipProgressCount">0%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div id="zipProgressBar" class="h-full bg-emerald-500 transition-all duration-150" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State Predictor -->
+      <div id="predictorEmptyState" class="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-10 text-center space-y-3">
+        <div class="text-4xl">🏆</div>
+        <h3 class="text-lg font-bold text-slate-700">Carica il tuo archivio Strava (.zip) o più file GPX</h3>
+        <p class="text-sm text-slate-500 max-w-lg mx-auto">
+          L'algoritmo scansionerà le tue corse in locale, scarterà gli altri sport dal calcolo del passo e calcolerà le tue proiezioni sui <strong>5 km, 10 km, Mezza Maratona, Maratona</strong> e su qualsiasi distanza personalizzata.
+        </p>
+      </div>
+
+      <!-- Risultati Predictor -->
+      <div id="predictorResultsContent" class="hidden space-y-6">
+
+        <!-- Banner Metodo Utilizzato -->
+        <div id="predictorMethodBanner" class="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+          <div class="space-y-0.5 max-w-3xl">
+            <div class="flex items-center gap-2">
+              <span id="predMethodBadge" class="text-[11px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-600 text-white">Picco VDOT + Mediana Fartlek + Calcio 65%</span>
+              <h3 id="predMethodTitle" class="text-sm font-bold text-slate-800">Calcolo completato</h3>
+            </div>
+            <p id="predMethodDesc" class="text-xs text-slate-600"></p>
+          </div>
+          <div class="flex items-center gap-4 text-right">
+            <div>
+              <span class="block text-[10px] font-bold uppercase text-slate-400">Indice VDOT Stimato</span>
+              <span id="predVdotVal" class="text-xl font-black text-emerald-700">--</span>
+            </div>
+            <div>
+              <span class="block text-[10px] font-bold uppercase text-slate-400">Esponente Fatica (Riegel)</span>
+              <span id="predFatigueExp" class="text-xl font-black text-slate-800">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statistiche Volume Recente -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase text-slate-400">Corse Analizzate</span>
+            <p id="predRunsCount" class="text-2xl font-extrabold text-slate-800 mt-0.5">0</p>
+            <span id="predDateRangeSub" class="text-[11px] text-slate-400">—</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase text-slate-400">Volume Settimanale (Eq.)</span>
+            <p id="predWeeklyKm" class="text-2xl font-extrabold text-emerald-600 mt-0.5">0.0 <span class="text-xs font-normal text-slate-500">km/s</span></p>
+            <span id="predWeeklySub" class="text-[11px] text-slate-400">Media ultime 6 settimane</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase text-slate-400">Corsa Più Lunga</span>
+            <p id="predLongestRun" class="text-2xl font-extrabold text-slate-800 mt-0.5">0.0 <span class="text-xs font-normal text-slate-500">km</span></p>
+            <span class="text-[11px] text-slate-400">Nel periodo selezionato</span>
+          </div>
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <span class="text-xs font-semibold uppercase text-slate-400">Miglior Sforzo Rilevato</span>
+            <p id="predBestGap" class="text-2xl font-extrabold text-emerald-600 mt-0.5">--:-- <span class="text-xs font-normal text-slate-500">/km</span></p>
+            <span id="predBestGapSub" class="text-[11px] text-slate-400">—</span>
+          </div>
+        </div>
+
+        <!-- Card Previsioni 5k, 10k, Mezza, Maratona -->
+        <div>
+          <h3 class="text-base font-extrabold text-slate-800 mb-3">⏱️ Tempi Gara Stimati</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">5 KM</span>
+                  <span class="text-[11px] font-semibold text-slate-400">Strada</span>
+                </div>
+                <p id="predTime5k" class="text-3xl font-black text-slate-900 mt-3">--:--</p>
+                <p id="predPace5k" class="text-sm font-bold text-emerald-600 mt-0.5">--:-- /km</p>
+              </div>
+              <p id="predNote5k" class="text-[11px] text-slate-500 mt-3 pt-2 border-t border-slate-100">—</p>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">10 KM</span>
+                  <span class="text-[11px] font-semibold text-slate-400">Strada</span>
+                </div>
+                <p id="predTime10k" class="text-3xl font-black text-slate-900 mt-3">--:--</p>
+                <p id="predPace10k" class="text-sm font-bold text-emerald-600 mt-0.5">--:-- /km</p>
+              </div>
+              <p id="predNote10k" class="text-[11px] text-slate-500 mt-3 pt-2 border-t border-slate-100">—</p>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border-2 border-emerald-500/40 flex flex-col justify-between relative">
+              <div>
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-extrabold uppercase tracking-wider text-white bg-emerald-600 px-2.5 py-1 rounded-lg">MEZZA (21.097 KM)</span>
+                  <span class="text-[11px] font-semibold text-emerald-700">21.1k</span>
+                </div>
+                <p id="predTime21k" class="text-3xl font-black text-slate-900 mt-3">--:--:--</p>
+                <p id="predPace21k" class="text-sm font-bold text-emerald-600 mt-0.5">--:-- /km</p>
+              </div>
+              <p id="predNote21k" class="text-[11px] text-slate-500 mt-3 pt-2 border-t border-slate-100">—</p>
+            </div>
+
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">MARATONA (42.195 KM)</span>
+                  <span class="text-[11px] font-semibold text-slate-400">42.2k</span>
+                </div>
+                <p id="predTime42k" class="text-3xl font-black text-slate-900 mt-3">--:--:--</p>
+                <p id="predPace42k" class="text-sm font-bold text-indigo-600 mt-0.5">--:-- /km</p>
+              </div>
+              <p id="predNote42k" class="text-[11px] text-slate-500 mt-3 pt-2 border-t border-slate-100">—</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calcolatore Distanza Personalizzata -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+              <h3 class="text-base font-bold text-slate-800">🎯 Proiezione Distanza Personalizzata</h3>
+              <p class="text-xs text-slate-500">Inserisci qualsiasi distanza (es. 5.5 km per una gara podistica locale, 15 km o 30 km)</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-center gap-2">
+                <input type="number" id="customRaceDistInput" value="5.5" min="0.8" max="100" step="0.1" oninput="updateCustomDistancePrediction()" class="w-24 px-3 py-2 text-base font-extrabold border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                <select id="customRaceUnitSelect" onchange="updateCustomDistancePrediction()" class="px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl bg-slate-50">
+                  <option value="km">km</option>
+                  <option value="m">metri</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-4 bg-slate-900 text-white px-5 py-2.5 rounded-xl">
+                <div>
+                  <span class="block text-[10px] uppercase tracking-wider text-slate-400">Tempo Stimato</span>
+                  <span id="predTimeCustom" class="text-xl font-black text-emerald-400">--:--</span>
+                </div>
+                <div class="border-l border-slate-700 pl-4">
+                  <span class="block text-[10px] uppercase tracking-wider text-slate-400">Passo Medio</span>
+                  <span id="predPaceCustom" class="text-xl font-black text-white">--:-- /km</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabella delle Corse Analizzate e Pesi -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-base font-bold text-slate-800">📋 Corse Recenti Utilizzate nel Calcolo</h3>
+              <p class="text-xs text-slate-500">
+                La colonna <strong>Ruolo nel Calcolo</strong> distingue il tuo <strong>🏆 Picco Base VDOT</strong> dagli allenamenti di qualità/Fartlek che forniscono il <strong>🔥 Bonus Costanza</strong> e dalle uscite usate <strong>📦 Solo per il Volume Settimanale</strong>.
+              </p>
+            </div>
+          </div>
+          <div class="overflow-x-auto custom-scroll max-h-96">
+            <table class="w-full text-left border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400 uppercase text-[11px]">
+                  <th class="py-2 px-2">Data</th>
+                  <th class="py-2 px-2">Nome / Miglior Tratto o Fartlek</th>
+                  <th class="py-2 px-2">Distanza</th>
+                  <th class="py-2 px-2">Tempo Mov.</th>
+                  <th class="py-2 px-2">Passo Medio</th>
+                  <th class="py-2 px-2">Disl. D+</th>
+                  <th class="py-2 px-2">GAP / Picco</th>
+                  <th class="py-2 px-2">FC Media</th>
+                  <th class="py-2 px-2">VDOT Eff.</th>
+                  <th class="py-2 px-2">Ruolo nel Calcolo</th>
+                </tr>
+              </thead>
+              <tbody id="predictorRunsTableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER & CREDITS -->
+  <footer class="bg-slate-900 text-slate-400 text-xs py-6 mt-12 border-t border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="text-emerald-400 font-bold">GPX Runner Analytics</span>
+        <span>&mdash; Sviluppato da</span>
+        <!-- Sostituisci href con il link alla tua landing page / portfolio -->
+        <a href="https://romeo0212.github.io/landing-page/" target="_blank" rel="noopener noreferrer" class="text-white font-bold hover:text-emerald-400 underline decoration-emerald-500/50 transition">
+          Romeo Calearo
+        </a>
+      </div>
+      <div class="flex items-center gap-4">
+        <!-- <span class="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700 font-medium">
+          ⚡ Vibe Coded Project
+        </span> -->
+        <button onclick="document.getElementById('privacyModal').classList.remove('hidden')" class="hover:text-white underline transition">
+          Privacy Policy &amp; Disclaimer
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- MODAL PRIVACY POLICY & DISCLAIMER -->
+  <div id="privacyModal" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-slate-700">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-extrabold text-slate-900">🔒 Privacy Policy &amp; Disclaimer</h3>
+        <button onclick="document.getElementById('privacyModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 font-black text-lg">&times;</button>
+      </div>
+      <div class="space-y-3 text-xs leading-relaxed max-h-80 overflow-y-auto pr-1">
+        <p><strong class="text-slate-900">1. Elaborazione 100% Locale (Zero Data Collection):</strong><br>
+        Questa web application funziona interamente lato client (all'interno del tuo browser). I file caricati (<code>.gpx</code>, <code>.tcx</code>, <code>.zip</code>, <code>.csv</code>) vengono letti ed elaborati esclusivamente nella memoria temporanea (RAM) del tuo dispositivo tramite JavaScript. <strong>Nessun dato personale, traccia GPS o file sanitario viene mai inviato, caricato o salvato su server esterni.</strong></p>
+
+        <p><strong class="text-slate-900">2. Assenza di Cookie e Tracciamento:</strong><br>
+        Questo sito non utilizza cookie di profilazione, cookie analitici o tracker pubblicitari. Non viene memorizzato alcun dato dopo la chiusura della scheda del browser.</p>
+
+        <p><strong class="text-slate-900">3. Servizi di Terze Parti (CDN e Mappe):</strong><br>
+        Per il caricamento delle librerie grafiche (Tailwind CSS, Chart.js, Leaflet, JSZip, Pako) e dei tasselli cartografici (OpenStreetMap), il browser effettua normali richieste di rete verso i rispettivi fornitori CDN/Tile Server, che potrebbero registrare l'indirizzo IP tecnico secondo le rispettive informative privacy. Le coordinate del tuo percorso non vengono salvate su tali server.</p>
+
+        <p><strong class="text-slate-900">4. Disclaimer Medico e Sportivo:</strong><br>
+        Le proiezioni dei tempi gara e gli indici fisiologici (VDOT, GAP, esponente di fatica) sono stime matematiche indicative generate da algoritmi statistici e non costituiscono in alcun modo parere medico o prescrizione di allenamento. L'autore declina ogni responsabilità per infortuni o utilizzi impropri delle stime riportate.</p>
+      </div>
+      <div class="pt-2 border-t border-slate-100 flex justify-end">
+        <button onclick="document.getElementById('privacyModal').classList.add('hidden')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition">
+          Ho capito
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // STATO GLOBALE APPLICAZIONE
+    // ============================================================================
+    let rawPoints = [];
+    let activePoints = [];
+    let hasTimeData = true;
+    let currentActivityName = 'Corsa GPX';
+    let splitMode = 'uniform';
+    let customBlocks = [
+      { label: 'Risc', val: 2, unit: 'km' },
+      { label: 'Vel 1', val: 1, unit: 'min' },
+      { label: 'Rec 1', val: 1, unit: 'min' },
+      { label: 'Vel 2', val: 1, unit: 'min' },
+      { label: 'Rec 2', val: 1, unit: 'min' },
+      { label: 'Def', val: 1, unit: 'km' }
+    ];
+    let computedSplits = [];
+    let paceChart = null;
+    let mapInstance = null;
+    let mapFullLayer = null;
+    let mapActiveLayer = null;
+
+    let allParsedRuns = [];
+    let allCrossTraining = [];
+    let currentPredModel = null;
+
+    function switchAppMode(mode) {
+      const singleDiv = document.getElementById('modeSingleContainer');
+      const predDiv = document.getElementById('modePredictorContainer');
+      const btnSingle = document.getElementById('tabBtnSingle');
+      const btnPred = document.getElementById('tabBtnPredictor');
+
+      if (mode === 'single') {
+        singleDiv.classList.remove('hidden');
+        predDiv.classList.add('hidden');
+        btnSingle.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-emerald-500 text-slate-950 shadow';
+        btnPred.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white';
+        if (mapInstance) setTimeout(() => mapInstance.invalidateSize(), 100);
+      } else {
+        singleDiv.classList.add('hidden');
+        predDiv.classList.remove('hidden');
+        btnPred.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-emerald-500 text-slate-950 shadow';
+        btnSingle.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white';
+      }
+    }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = d => (d * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function formatPace(secPerKm) {
+      if (!Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return '--:--';
+      const totalSec = Math.round(secPerKm);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function parsePaceInput(str) {
+      if (!str) return null;
+      const parts = str.trim().split(':');
+      if (parts.length !== 2) return null;
+      const m = parseInt(parts[0], 10);
+      const s = parseInt(parts[1], 10);
+      if (isNaN(m) || isNaN(s)) return null;
+      return m * 60 + s;
+    }
+
+    function formatDuration(totalSeconds, forceHours = false) {
+      if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '--:--';
+      const sec = Math.round(totalSeconds);
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0 || forceHours) {
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function computeSmoothedElevationGain(eleArray) {
+      if (!eleArray || eleArray.length < 5) return 0;
+      const smoothed = [];
+      const win = 3;
+      for (let i = 0; i < eleArray.length; i++) {
+        let sum = 0, cnt = 0;
+        for (let j = Math.max(0, i - win); j <= Math.min(eleArray.length - 1, i + win); j++) {
+          if (Number.isFinite(eleArray[j])) {
+            sum += eleArray[j];
+            cnt++;
+          }
+        }
+        smoothed.push(cnt > 0 ? sum / cnt : 0);
+      }
+
+      let gain = 0;
+      let refEle = smoothed[0];
+      const threshold = 3.5;
+      for (let i = 1; i < smoothed.length; i++) {
+        const diff = smoothed[i] - refEle;
+        if (diff >= threshold) {
+          gain += diff;
+          refEle = smoothed[i];
+        } else if (diff <= -threshold) {
+          refEle = smoothed[i];
+        }
+      }
+      return Math.round(gain);
+    }
+
+    function calcMedian(arr) {
+      if (!arr || !arr.length) return 0;
+      const sorted = arr.slice().sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    // ============================================================================
+    // MODALITÀ 1: PARSING E LOGICA SINGOLO GPX
+    // ============================================================================
+    document.getElementById('gpxFileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        parseSingleGPX(evt.target.result, file.name);
+      };
+      reader.readAsText(file);
+    });
+
+    function parseSingleGPX(xmlText, fallbackName) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, 'text/xml');
+      const nameNode = xml.querySelector('trk > name') || xml.querySelector('metadata > name');
+      currentActivityName = nameNode ? nameNode.textContent.trim() : fallbackName.replace(/\.gpx$/i, '');
+
+      const trkpts = Array.from(xml.querySelectorAll('trkpt'));
+      if (trkpts.length < 2) {
+        alert('Il file GPX selezionato non contiene abbastanza coordinate GPS.');
+        return;
+      }
+
+      let pts = [];
+      let cumDist = 0;
+      let firstTimeMs = null;
+      let validTimeCount = 0;
+
+      for (let i = 0; i < trkpts.length; i++) {
+        const pt = trkpts[i];
+        const lat = parseFloat(pt.getAttribute('lat'));
+        const lon = parseFloat(pt.getAttribute('lon'));
+        if (isNaN(lat) || isNaN(lon)) continue;
+
+        const eleNode = pt.querySelector('ele');
+        const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
+
+        const timeNode = pt.querySelector('time');
+        let timeMs = null;
+        if (timeNode && timeNode.textContent) {
+          const parsed = Date.parse(timeNode.textContent.trim());
+          if (!isNaN(parsed)) {
+            timeMs = parsed;
+            validTimeCount++;
+            if (firstTimeMs === null) firstTimeMs = parsed;
+          }
+        }
+
+        if (pts.length > 0) {
+          const prev = pts[pts.length - 1];
+          cumDist += haversineMeters(prev.lat, prev.lon, lat, lon);
+        }
+
+        pts.push({
+          lat,
+          lon,
+          ele: isNaN(ele) ? 0 : ele,
+          cumDist,
+          cumTime: timeMs !== null && firstTimeMs !== null ? (timeMs - firstTimeMs) / 1000 : 0
+        });
+      }
+
+      rawPoints = pts;
+      hasTimeData = validTimeCount >= Math.max(2, Math.floor(pts.length * 0.5)) && (pts[pts.length - 1].cumTime > 0);
+
+      document.getElementById('singleEmptyState').classList.add('hidden');
+      document.getElementById('singleDashboardContent').classList.remove('hidden');
+
+      const warningBanner = document.getElementById('noTimeWarningBanner');
+      const paceSection = document.getElementById('paceAnalysisSection');
+      const splitsTableCard = document.getElementById('splitsTableContainer');
+      const mapCard = document.getElementById('mapCardContainer');
+      const trimTimeOpt = document.getElementById('trimModeTimeOption');
+
+      if (!hasTimeData) {
+        warningBanner.classList.remove('hidden');
+        paceSection.classList.add('hidden');
+        splitsTableCard.classList.add('hidden');
+        mapCard.classList.add('lg:col-span-2');
+        trimTimeOpt.disabled = true;
+        document.getElementById('trimModeSelect').value = 'dist';
+      } else {
+        warningBanner.classList.add('hidden');
+        paceSection.classList.remove('hidden');
+        splitsTableCard.classList.remove('hidden');
+        mapCard.classList.remove('lg:col-span-2');
+        trimTimeOpt.disabled = false;
+      }
+
+      initTrimControls();
+      renderCustomBlocksList();
+      applyTrimAndRefresh();
+    }
+
+    function computeElevationGain(pts) {
+      return computeSmoothedElevationGain(pts.map(p => p.ele));
+    }
+
+    function initTrimControls() {
+      if (!rawPoints.length) return;
+      const mode = document.getElementById('trimModeSelect').value;
+      const startSlider = document.getElementById('trimStartSlider');
+      const endSlider = document.getElementById('trimEndSlider');
+
+      if (mode === 'dist') {
+        const maxKm = +(rawPoints[rawPoints.length - 1].cumDist / 1000).toFixed(3);
+        startSlider.min = 0; startSlider.max = maxKm; startSlider.step = 0.01; startSlider.value = 0;
+        endSlider.min = 0; endSlider.max = maxKm; endSlider.step = 0.01; endSlider.value = maxKm;
+      } else {
+        const maxMin = +(rawPoints[rawPoints.length - 1].cumTime / 60).toFixed(2);
+        startSlider.min = 0; startSlider.max = maxMin; startSlider.step = 0.1; startSlider.value = 0;
+        endSlider.min = 0; endSlider.max = maxMin; endSlider.step = 0.1; endSlider.value = maxMin;
+      }
+      updateTrimLabels();
+    }
+
+    function onTrimModeChange() { initTrimControls(); applyTrimAndRefresh(); }
+
+    function onTrimSliderInput(which) {
+      const startSlider = document.getElementById('trimStartSlider');
+      const endSlider = document.getElementById('trimEndSlider');
+      let s = parseFloat(startSlider.value);
+      let e = parseFloat(endSlider.value);
+
+      if (which === 'start' && s >= e) startSlider.value = Math.max(0, e - 0.05);
+      else if (which === 'end' && e <= s) endSlider.value = Math.min(parseFloat(endSlider.max), s + 0.05);
+      updateTrimLabels();
+      applyTrimAndRefresh();
+    }
+
+    function nudgeTrim(which, deltaMeters) {
+      if (!rawPoints.length) return;
+      const mode = document.getElementById('trimModeSelect').value;
+      const slider = document.getElementById(which === 'start' ? 'trimStartSlider' : 'trimEndSlider');
+      let val = parseFloat(slider.value);
+      val += mode === 'dist' ? deltaMeters / 1000 : (deltaMeters / 1000) * 5;
+      val = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), val));
+      slider.value = val;
+      onTrimSliderInput(which);
+    }
+
+    function resetTrim() { initTrimControls(); applyTrimAndRefresh(); }
+
+    function updateTrimLabels() {
+      const mode = document.getElementById('trimModeSelect').value;
+      const s = parseFloat(document.getElementById('trimStartSlider').value);
+      const e = parseFloat(document.getElementById('trimEndSlider').value);
+      if (mode === 'dist') {
+        document.getElementById('trimStartLabel').textContent = `${s.toFixed(2)} km`;
+        document.getElementById('trimEndLabel').textContent = `${e.toFixed(2)} km`;
+      } else {
+        document.getElementById('trimStartLabel').textContent = formatDuration(s * 60);
+        document.getElementById('trimEndLabel').textContent = formatDuration(e * 60);
+      }
+    }
+
+    function applyTrimAndRefresh() {
+      if (!rawPoints.length) return;
+      const mode = document.getElementById('trimModeSelect').value;
+      const sVal = parseFloat(document.getElementById('trimStartSlider').value);
+      const eVal = parseFloat(document.getElementById('trimEndSlider').value);
+
+      let filtered = mode === 'dist'
+        ? rawPoints.filter(p => p.cumDist >= sVal * 1000 && p.cumDist <= eVal * 1000)
+        : rawPoints.filter(p => p.cumTime >= sVal * 60 && p.cumTime <= eVal * 60);
+
+      if (filtered.length < 2) filtered = rawPoints.slice();
+
+      const baseDist = filtered[0].cumDist;
+      const baseTime = filtered[0].cumTime;
+      activePoints = filtered.map(p => ({
+        lat: p.lat, lon: p.lon, ele: p.ele,
+        cumDist: p.cumDist - baseDist,
+        cumTime: p.cumTime - baseTime
+      }));
+
+      updateSummaryCards();
+      renderMap();
+      if (hasTimeData) recalculateSplits();
+    }
+
+    function updateSummaryCards() {
+      const totalDistM = activePoints[activePoints.length - 1]?.cumDist || 0;
+      const totalTimeS = activePoints[activePoints.length - 1]?.cumTime || 0;
+      const elevGain = computeElevationGain(activePoints);
+
+      document.getElementById('statName').textContent = currentActivityName;
+      document.getElementById('statDist').innerHTML = `${(totalDistM / 1000).toFixed(2)} <span class="text-xs font-normal text-slate-500">km</span>`;
+      document.getElementById('statElev').innerHTML = `${elevGain} <span class="text-xs font-normal text-slate-500">m</span>`;
+
+      if (hasTimeData && totalTimeS > 0) {
+        const avgPace = totalTimeS / (totalDistM / 1000);
+        document.getElementById('statTime').textContent = formatDuration(totalTimeS);
+        document.getElementById('statPace').innerHTML = `${formatPace(avgPace)} <span class="text-xs font-normal text-slate-500">/km</span>`;
+      } else {
+        document.getElementById('statTime').textContent = 'N/D';
+        document.getElementById('statPace').innerHTML = `N/D`;
+      }
+    }
+
+    function interpolateAtDistance(pts, targetDist) {
+      if (targetDist <= 0) return { cumDist: 0, cumTime: 0, ele: pts[0].ele };
+      const last = pts[pts.length - 1];
+      if (targetDist >= last.cumDist) return { cumDist: last.cumDist, cumTime: last.cumTime, ele: last.ele };
+
+      let low = 0, high = pts.length - 1;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (pts[mid].cumDist < targetDist) low = mid + 1;
+        else high = mid;
+      }
+      const i = Math.max(1, low);
+      const p0 = pts[i - 1], p1 = pts[i];
+      const span = p1.cumDist - p0.cumDist;
+      const ratio = span > 0 ? (targetDist - p0.cumDist) / span : 0;
+      return {
+        cumDist: targetDist,
+        cumTime: p0.cumTime + ratio * (p1.cumTime - p0.cumTime),
+        ele: p0.ele + ratio * (p1.ele - p0.ele)
+      };
+    }
+
+    function interpolateAtTime(pts, targetTime) {
+      if (targetTime <= 0) return { cumDist: 0, cumTime: 0, ele: pts[0].ele };
+      const last = pts[pts.length - 1];
+      if (targetTime >= last.cumTime) return { cumDist: last.cumDist, cumTime: last.cumTime, ele: last.ele };
+
+      let low = 0, high = pts.length - 1;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (pts[mid].cumTime < targetTime) low = mid + 1;
+        else high = mid;
+      }
+      const i = Math.max(1, low);
+      const p0 = pts[i - 1], p1 = pts[i];
+      const span = p1.cumTime - p0.cumTime;
+      const ratio = span > 0 ? (targetTime - p0.cumTime) / span : 0;
+      return {
+        cumDist: p0.cumDist + ratio * (p1.cumDist - p0.cumDist),
+        cumTime: targetTime,
+        ele: p0.ele + ratio * (p1.ele - p0.ele)
+      };
+    }
+
+    function setSplitMode(mode) {
+      splitMode = mode;
+      document.getElementById('uniformConfigPanel').classList.toggle('hidden', mode !== 'uniform');
+      document.getElementById('customConfigPanel').classList.toggle('hidden', mode !== 'custom');
+      document.getElementById('btnModeUniform').className = mode === 'uniform' ? 'px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition' : 'px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+      document.getElementById('btnModeCustom').className = mode === 'custom' ? 'px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition' : 'px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+      recalculateSplits();
+    }
+
+    function applyUniformPreset(val, unit) {
+      document.getElementById('uniformValInput').value = val;
+      document.getElementById('uniformUnitSelect').value = unit;
+      recalculateSplits();
+    }
+
+    function addCustomBlock() {
+      const label = document.getElementById('singleBlockLabel').value.trim();
+      const val = parseFloat(document.getElementById('singleBlockVal').value);
+      const unit = document.getElementById('singleBlockUnit').value;
+      if (isNaN(val) || val <= 0) return;
+      customBlocks.push({ label, val, unit });
+      document.getElementById('singleBlockLabel').value = '';
+      renderCustomBlocksList();
+      recalculateSplits();
+    }
+
+    function addFartlekSeries() {
+      const reps = parseInt(document.getElementById('repCount').value, 10) || 1;
+      const wVal = parseFloat(document.getElementById('repWorkVal').value) || 1;
+      const wUnit = document.getElementById('repWorkUnit').value;
+      const rVal = parseFloat(document.getElementById('repRecVal').value) || 1;
+      const rUnit = document.getElementById('repRecUnit').value;
+
+      for (let i = 1; i <= reps; i++) {
+        customBlocks.push({ label: `Vel ${i}`, val: wVal, unit: wUnit });
+        customBlocks.push({ label: `Rec ${i}`, val: rVal, unit: rUnit });
+      }
+      renderCustomBlocksList();
+      recalculateSplits();
+    }
+
+    function removeCustomBlock(idx) {
+      customBlocks.splice(idx, 1);
+      renderCustomBlocksList();
+      recalculateSplits();
+    }
+
+    function clearCustomBlocks() {
+      customBlocks = [];
+      renderCustomBlocksList();
+      recalculateSplits();
+    }
+
+    function renderCustomBlocksList() {
+      const container = document.getElementById('customBlocksList');
+      if (!customBlocks.length) {
+        container.innerHTML = `<span class="text-xs text-slate-400 italic">Nessun blocco inserito. Aggiungi un blocco o una serie qui sopra.</span>`;
+        return;
+      }
+      container.innerHTML = customBlocks.map((b, i) => {
+        const uStr = b.unit === 'min' ? "'" : (b.unit === 'sec' ? '"' : b.unit);
+        const tag = b.label ? `${b.val}${uStr} (${b.label})` : `${b.val}${uStr}`;
+        return `<span class="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm">
+          <span>${tag}</span>
+          <button onclick="removeCustomBlock(${i})" class="text-slate-400 hover:text-red-600 font-black">&times;</button>
+        </span>`;
+      }).join('');
+    }
+
+    function formatRemainderLabel(remMeters) {
+      const remStr = remMeters >= 1000 ? `${(remMeters / 1000).toFixed(2)}km` : `${Math.round(remMeters)}m`;
+      return `Fine (${remStr})`;
+    }
+
+    // Calcola la % di oscillazione interna (variabilità del passo) DENTRO un singolo blocco [startDistM -> endDistM]
+    function computeInternalBlockVariabilityPct(pts, startDistM, endDistM, blockPaceSecKm) {
+      const spanDist = endDistM - startDistM;
+      if (!pts || pts.length < 4 || spanDist < 30 || !Number.isFinite(blockPaceSecKm) || blockPaceSecKm <= 0) {
+        return 0;
+      }
+
+      // Dividiamo il blocco in sotto-fette (minimo 4 fette da ~50m-100m ciascuna per filtrare il rumore GPS del singolo secondo)
+      const numSlices = Math.max(2, Math.min(12, Math.round(spanDist / 60)));
+      const sliceLen = spanDist / numSlices;
+
+      let weightedAbsDiffSum = 0;
+      let validDistSum = 0;
+
+      for (let k = 0; k < numSlices; k++) {
+        const d0 = startDistM + k * sliceLen;
+        const d1 = (k === numSlices - 1) ? endDistM : (d0 + sliceLen);
+        const p0 = interpolateAtDistance(pts, d0);
+        const p1 = interpolateAtDistance(pts, d1);
+        const subD = p1.cumDist - p0.cumDist;
+        const subT = p1.cumTime - p0.cumTime;
+
+        if (subD > 5 && subT > 0.5) {
+          const subPace = subT / (subD / 1000);
+          // Ignora eventuali pause/spike assurdi
+          if (subPace >= 120 && subPace <= 1200) {
+            weightedAbsDiffSum += Math.abs(subPace - blockPaceSecKm) * subD;
+            validDistSum += subD;
+          }
+        }
+      }
+
+      if (validDistSum <= 0) return 0;
+      const meanAbsDevSecKm = weightedAbsDiffSum / validDistSum;
+      return (meanAbsDevSecKm / blockPaceSecKm) * 100;
+    }
+
+    function recalculateSplits() {
+      if (!activePoints.length || !hasTimeData) return;
+      const totalDist = activePoints[activePoints.length - 1].cumDist;
+      const totalTime = activePoints[activePoints.length - 1].cumTime;
+
+      let splits = [];
+      if (splitMode === 'uniform') {
+        const val = parseFloat(document.getElementById('uniformValInput').value) || 1;
+        const unit = document.getElementById('uniformUnitSelect').value;
+        const labelMode = document.getElementById('uniformLabelMode').value;
+
+        const isDist = unit === 'km' || unit === 'm';
+        const step = isDist ? (unit === 'km' ? val * 1000 : val) : (unit === 'min' ? val * 60 : val);
+        if (step <= 0) return;
+
+        let cur = 0, idx = 1;
+        const limit = isDist ? totalDist : totalTime;
+
+        while (cur < limit - 0.5) {
+          const next = Math.min(cur + step, limit);
+          const isRemainder = (next - cur) < step * 0.98 && next === limit;
+          const pStart = isDist ? interpolateAtDistance(activePoints, cur) : interpolateAtTime(activePoints, cur);
+          const pEnd = isDist ? interpolateAtDistance(activePoints, next) : interpolateAtTime(activePoints, next);
+
+          const dM = pEnd.cumDist - pStart.cumDist;
+          const tS = pEnd.cumTime - pStart.cumTime;
+          if (dM > 1 && tS > 0.2) {
+            let lbl = isRemainder ? formatRemainderLabel(dM) : `${labelMode === 'cumulative' ? +(val * idx).toFixed(2) : +val.toFixed(2)}${unit === 'min' ? "'" : (unit === 'sec' ? '"' : unit)}`;
+            const paceSecKm = tS / (dM / 1000);
+            splits.push({
+              index: idx++, label: lbl, distM: dM, timeS: tS,
+              paceSecKm: paceSecKm,
+              internalVarPct: computeInternalBlockVariabilityPct(activePoints, pStart.cumDist, pEnd.cumDist, paceSecKm),
+              elevDiff: Math.round(pEnd.ele - pStart.ele), isRemainder
+            });
+          }
+          cur = next;
+        }
+      } else {
+        let curDist = 0, curTime = 0, idx = 1;
+        for (const b of customBlocks) {
+          if (curDist >= totalDist - 1 || curTime >= totalTime - 0.5) break;
+          const isDist = b.unit === 'km' || b.unit === 'm';
+          const pStart = { cumDist: curDist, cumTime: curTime, ele: interpolateAtDistance(activePoints, curDist).ele };
+          let pEnd = isDist
+            ? interpolateAtDistance(activePoints, Math.min(curDist + (b.unit === 'km' ? b.val * 1000 : b.val), totalDist))
+            : interpolateAtTime(activePoints, Math.min(curTime + (b.unit === 'min' ? b.val * 60 : b.val), totalTime));
+
+          const dM = pEnd.cumDist - pStart.cumDist;
+          const tS = pEnd.cumTime - pStart.cumTime;
+          if (dM > 1 && tS > 0.2) {
+            const uStr = b.unit === 'min' ? "'" : (b.unit === 'sec' ? '"' : b.unit);
+            const paceSecKm = tS / (dM / 1000);
+            splits.push({
+              index: idx++, label: b.label ? `${b.val}${uStr} (${b.label})` : `${b.val}${uStr}`,
+              distM: dM, timeS: tS, paceSecKm: paceSecKm,
+              internalVarPct: computeInternalBlockVariabilityPct(activePoints, pStart.cumDist, pEnd.cumDist, paceSecKm),
+              elevDiff: Math.round(pEnd.ele - pStart.ele), isRemainder: false
+            });
+          }
+          curDist = pEnd.cumDist;
+          curTime = pEnd.cumTime;
+        }
+
+        if (curDist < totalDist - 5) {
+          const pStart = interpolateAtDistance(activePoints, curDist);
+          const pEnd = activePoints[activePoints.length - 1];
+          const dM = pEnd.cumDist - pStart.cumDist;
+          const tS = pEnd.cumTime - pStart.cumTime;
+          if (dM > 1 && tS > 0.2) {
+            const paceSecKm = tS / (dM / 1000);
+            splits.push({
+              index: idx++, label: formatRemainderLabel(dM), distM: dM, timeS: tS,
+              paceSecKm: paceSecKm,
+              internalVarPct: computeInternalBlockVariabilityPct(activePoints, pStart.cumDist, pEnd.cumDist, paceSecKm),
+              elevDiff: Math.round(pEnd.ele - pStart.ele), isRemainder: true
+            });
+          }
+        }
+      }
+
+      computedSplits = splits;
+      renderSplitsTable();
+      updateChartFromControls();
+    }
+
+    function renderSplitsTable() {
+      const tbody = document.getElementById('splitsTableBody');
+      tbody.innerHTML = computedSplits.map(s => {
+        const distFormatted = s.distM >= 1000 ? `${(s.distM / 1000).toFixed(2)} km` : `${Math.round(s.distM)} m`;
+        const elevStr = s.elevDiff > 0 ? `+${s.elevDiff}m` : `${s.elevDiff}m`;
+
+        const varPct = s.internalVarPct || 0;
+        const varSec = Math.round((varPct / 100) * s.paceSecKm);
+        let varBadgeClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+        if (varPct > 6.5) varBadgeClass = 'bg-rose-100 text-rose-800 border border-rose-200';
+        else if (varPct > 3.0) varBadgeClass = 'bg-amber-100 text-amber-800 border border-amber-200';
+
+        return `<tr class="hover:bg-slate-50">
+          <td class="py-2 px-2 font-bold text-slate-400">${s.index}</td>
+          <td class="py-2 px-2 font-bold text-slate-800">${s.label}</td>
+          <td class="py-2 px-2 text-slate-600">${distFormatted}</td>
+          <td class="py-2 px-2 text-slate-600">${formatDuration(s.timeS)}</td>
+          <td class="py-2 px-2 font-extrabold text-emerald-600">${formatPace(s.paceSecKm)} /km</td>
+          <td class="py-2 px-2"><span class="text-[11px] font-bold px-2 py-0.5 rounded-md ${varBadgeClass}" title="Oscillazione media interna: ±${varSec}s/km">±${varPct.toFixed(1)}%</span></td>
+          <td class="py-2 px-2 text-slate-500">${elevStr}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function setYAxisPreset(minStr, maxStr) {
+      document.getElementById('yAxisMinPace').value = minStr;
+      document.getElementById('yAxisMaxPace').value = maxStr;
+      updateChartFromControls();
+    }
+
+    function setYAxisAuto() {
+      if (!computedSplits.length) return;
+      const paces = computedSplits.filter(s => !s.isRemainder).map(s => s.paceSecKm);
+      const valid = paces.length ? paces : computedSplits.map(s => s.paceSecKm);
+      const minP = Math.max(120, Math.floor((Math.min(...valid) - 25) / 15) * 15);
+      const maxP = Math.min(900, Math.ceil((Math.max(...valid) + 30) / 15) * 15);
+      document.getElementById('yAxisMinPace').value = formatPace(minP);
+      document.getElementById('yAxisMaxPace').value = formatPace(maxP);
+      updateChartFromControls();
+    }
+
+    function updateChartFromControls() {
+      const hideRem = document.getElementById('hideShortRemainderChk').checked;
+      const displaySplits = hideRem ? computedSplits.filter(s => !s.isRemainder) : computedSplits;
+      document.getElementById('segmentsCountBadge').textContent = `${displaySplits.length} segmenti`;
+
+      const fastSec = parsePaceInput(document.getElementById('yAxisMinPace').value) || 180;
+      const slowSec = parsePaceInput(document.getElementById('yAxisMaxPace').value) || 480;
+      const minMin = Math.min(fastSec, slowSec) / 60;
+      const maxMin = Math.max(fastSec, slowSec) / 60;
+
+      const ctx = document.getElementById('paceChartCanvas').getContext('2d');
+      if (paceChart) paceChart.destroy();
+
+      const barPaceLabelsPlugin = {
+        id: 'barPaceLabelsPlugin',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.textAlign = 'center';
+          meta.data.forEach((bar, index) => {
+            const split = displaySplits[index];
+            if (!split) return;
+            const paceStr = formatPace(split.paceSecKm);
+            const varPct = split.internalVarPct || 0;
+            const varStr = `±${varPct.toFixed(1)}%`;
+            const topY = Math.min(bar.y, bar.base);
+            const barHeight = Math.abs(Math.max(bar.y, bar.base) - topY);
+
+            ctx.font = '800 11px Inter, sans-serif';
+            if (topY > 28) {
+              ctx.fillStyle = '#065f46';
+              ctx.fillText(paceStr, bar.x, topY - 14);
+              ctx.font = '700 9.5px Inter, sans-serif';
+              ctx.fillStyle = varPct <= 3.0 ? '#059669' : (varPct <= 6.5 ? '#d97706' : '#e11d48');
+              ctx.fillText(varStr, bar.x, topY - 3);
+            } else if (barHeight > 34) {
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(paceStr, bar.x, topY + 15);
+              ctx.font = '700 9.5px Inter, sans-serif';
+              ctx.fillStyle = '#d1fae5';
+              ctx.fillText(varStr, bar.x, topY + 27);
+            }
+          });
+          ctx.restore();
+        }
+      };
+
+      paceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: displaySplits.map(s => s.label),
+          datasets: [{
+            label: 'Passo (min/km)',
+            data: displaySplits.map(s => [s.paceSecKm / 60, maxMin]),
+            backgroundColor: displaySplits.map(s => s.isRemainder ? '#34d399' : '#10b981'),
+            borderRadius: 6,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 32 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => {
+              const s = displaySplits[c.dataIndex];
+              const dStr = s.distM >= 1000 ? `${(s.distM / 1000).toFixed(2)}km` : `${Math.round(s.distM)}m`;
+              return `Passo: ${formatPace(s.paceSecKm)} /km (Oscill. int: ±${(s.internalVarPct||0).toFixed(1)}%) | Dist: ${dStr}`;
+            }}}
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { weight: '600', size: 11 }, color: '#334155' } },
+            y: {
+              reverse: true, min: minMin, max: maxMin,
+              ticks: { stepSize: 1, callback: (v) => formatPace(v * 60), font: { weight: '600', size: 11 }, color: '#64748b' },
+              title: { display: true, text: 'Passo (min/km)', font: { weight: 'bold', size: 11 }, color: '#64748b' }
+            }
+          }
+        },
+        plugins: [barPaceLabelsPlugin]
+      });
+    }
+
+    function renderMap() {
+      if (!rawPoints.length) return;
+      if (!mapInstance) {
+        mapInstance = L.map('leafletMap');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mapInstance);
+      }
+      if (mapFullLayer) mapInstance.removeLayer(mapFullLayer);
+      if (mapActiveLayer) mapInstance.removeLayer(mapActiveLayer);
+      mapFullLayer = L.polyline(rawPoints.map(p => [p.lat, p.lon]), { color: '#94a3b8', weight: 4, dashArray: '6, 6' }).addTo(mapInstance);
+      mapActiveLayer = L.polyline(activePoints.map(p => [p.lat, p.lon]), { color: '#10b981', weight: 5 }).addTo(mapInstance);
+      mapInstance.fitBounds(mapActiveLayer.getBounds(), { padding: [20, 20] });
+    }
+
+    // ============================================================================
+    // MODALITÀ 2: ARCHIVIO STRAVA (.ZIP O MULTI-GPX/TCX) E PROIEZIONI GARA
+    // ============================================================================
+    document.getElementById('stravaArchiveInput').addEventListener('change', async function(e) {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+
+      const progBox = document.getElementById('zipProgressContainer');
+      const progBar = document.getElementById('zipProgressBar');
+      const progText = document.getElementById('zipProgressText');
+      const progCount = document.getElementById('zipProgressCount');
+
+      progBox.classList.remove('hidden');
+      progBar.style.width = '5%';
+      progText.textContent = 'Analisi file caricati...';
+      progCount.textContent = '5%';
+
+      let extractedRuns = [];
+      let extractedCross = [];
+
+      try {
+        for (const file of files) {
+          const lowName = file.name.toLowerCase();
+          if (lowName.endsWith('.zip')) {
+            const zipRes = await processStravaZipArchive(file, (msg, pct) => {
+              progText.textContent = msg;
+              progCount.textContent = `${Math.round(pct)}%`;
+              progBar.style.width = `${pct}%`;
+            });
+            extractedRuns.push(...zipRes.runs);
+            extractedCross.push(...zipRes.crossTraining);
+          } else if (lowName.endsWith('.gpx')) {
+            const text = await file.text();
+            const runObj = parseGpxSummaryForPredictor(text, file.name);
+            if (runObj) extractedRuns.push(runObj);
+          } else if (lowName.endsWith('.tcx')) {
+            const text = await file.text();
+            const runObj = parseTcxSummaryForPredictor(text, file.name);
+            if (runObj) {
+              if (runObj.isCrossTraining) extractedCross.push(runObj);
+              else extractedRuns.push(runObj);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Errore durante la lettura dell\'archivio: ' + err.message);
+      }
+
+      progBox.classList.add('hidden');
+
+      if (!extractedRuns.length) {
+        alert('Nessuna attività di corsa trovata nei file selezionati.');
+        return;
+      }
+
+      const uniqueRuns = [], seen = new Set();
+      extractedRuns.forEach(r => {
+        const key = r.dateMs + '_' + Math.round(r.distM);
+        if (!seen.has(key)) { seen.add(key); uniqueRuns.push(r); }
+      });
+
+      allParsedRuns = uniqueRuns.sort((a, b) => b.dateMs - a.dateMs);
+      allCrossTraining = extractedCross.sort((a, b) => b.dateMs - a.dateMs);
+
+      document.getElementById('predictorEmptyState').classList.add('hidden');
+      document.getElementById('predictorResultsContent').classList.remove('hidden');
+
+      recomputePredictionsFromLoaded();
+    });
+
+    function parseCSVText(text) {
+      const primaRiga = text.split('\n')[0] || '';
+      const delimiter = (primaRiga.split(';').length > primaRiga.split(',').length) ? ';' : ',';
+      const rows = [];
+      let row = [], cur = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+          else if (c === '"') inQuotes = false;
+          else cur += c;
+        } else {
+          if (c === '"') inQuotes = true;
+          else if (c === delimiter) { row.push(cur); cur = ''; }
+          else if (c === '\n' || c === '\r') {
+            if (c === '\r' && text[i + 1] === '\n') i++;
+            row.push(cur);
+            if (row.length > 1 || row[0] !== '') rows.push(row);
+            row = []; cur = '';
+          } else cur += c;
+        }
+      }
+      if (cur || row.length) { row.push(cur); rows.push(row); }
+      return rows;
+    }
+
+    function parseFlexibleStravaDate(dateStr) {
+      if (!dateStr) return null;
+      const clean = dateStr.trim().replace(/,/g, '');
+      const itMonthsIdx = {
+        gen: 0, feb: 1, mar: 2, apr: 3, mag: 4, giu: 5,
+        lug: 6, ago: 7, set: 8, ott: 9, nov: 10, dic: 11,
+        jan: 0, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, dec: 11
+      };
+      const m = clean.match(/^(\d{1,2})\s+([a-zA-Z]{3,})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (m) {
+        const day = parseInt(m[1], 10);
+        const monKey = m[2].toLowerCase().slice(0, 3);
+        const year = parseInt(m[3], 10);
+        const hh = m[4] ? parseInt(m[4], 10) : 12;
+        const mm = m[5] ? parseInt(m[5], 10) : 0;
+        const ss = m[6] ? parseInt(m[6], 10) : 0;
+        if (itMonthsIdx[monKey] !== undefined) {
+          return new Date(year, itMonthsIdx[monKey], day, hh, mm, ss).getTime();
+        }
+      }
+      const parsed = Date.parse(clean);
+      return isNaN(parsed) ? null : parsed;
+    }
+
+    function isRunningTypeString(actType) {
+      if (!actType) return false;
+      const s = actType.toLowerCase().trim();
+      return ['run', 'running', 'corsa', 'trail run', 'trail running', 'virtual run', 'corsa virtuale', 'treadmill'].includes(s);
+    }
+
+    // Estrazione universale basata su distanza GPS continua:
+    // 1. Segmenti continui >= 1 km (per medi, progressivi e ripetute lunghe)
+    // 2. Rilevatore Ciclico Fartlek: riconosce un Fartlek SOLO SE ci sono almeno 3 vere oscillazioni Veloce <-> Recupero Lento!
+    function extractBestSubSegments(pts) {
+      if (!pts || pts.length < 15) return [];
+      const totalDist = pts[pts.length - 1].cumDist;
+      const results = [];
+
+      // 1. Segmenti continui da 1km a 5km
+      const contTargets = [
+        { d: 1000, label: 'Miglior 1km' },
+        { d: 1500, label: 'Miglior 1.5km' },
+        { d: 2000, label: 'Miglior 2km' },
+        { d: 3000, label: 'Miglior 3km' },
+        { d: 5000, label: 'Miglior 5km' }
+      ];
+
+      for (const t of contTargets) {
+        if (totalDist < t.d * 1.18) continue;
+        let left = 0, bestTimeS = Infinity;
+        for (let right = 1; right < pts.length; right++) {
+          while (pts[right].cumDist - pts[left].cumDist >= t.d) {
+            const dSpan = pts[right].cumDist - pts[left].cumDist;
+            const tSpanMov = pts[right].cumMovTime - pts[left].cumMovTime;
+            const tSpanWall = pts[right].cumWallTime - pts[left].cumWallTime;
+            if (dSpan > 0 && tSpanMov > 0 && dSpan <= t.d * 1.18 && (tSpanWall - tSpanMov) <= 25) {
+              const normTime = tSpanMov * (t.d / dSpan);
+              const pace = normTime / (t.d / 1000);
+              if (pace >= 165 && pace <= 600 && normTime < bestTimeS) {
+                bestTimeS = normTime;
+              }
+            }
+            left++;
+          }
+        }
+        if (bestTimeS < Infinity) {
+          results.push({
+            type: 'continuous',
+            distM: t.d,
+            timeS: bestTimeS,
+            elevM: 0,
+            label: `${t.label} (${formatDuration(bestTimeS)} @ ${formatPace(bestTimeS / (t.d / 1000))}/km)`
+          });
+        }
+      }
+
+      // 2. Rilevatore Ciclico Fartlek su blocchi consecutivi di 30 secondi (basati su distanza GPS continua Haversine)
+      if (totalDist >= 2500) {
+        const blocks = [];
+        let curT = 0, lastD = 0;
+        for (let i = 0; i < pts.length; i++) {
+          if (pts[i].cumMovTime - curT >= 30) {
+            const dt = pts[i].cumMovTime - curT;
+            const dd = pts[i].cumDist - lastD;
+            if (dd > 25 && dt <= 45) {
+              const pace = dt / (dd / 1000);
+              if (pace >= 165 && pace <= 800) {
+                blocks.push(pace);
+              }
+            }
+            curT = pts[i].cumMovTime;
+            lastD = pts[i].cumDist;
+          }
+        }
+
+        if (blocks.length >= 8) {
+          const overallMedian = calcMedian(blocks);
+          const fastBlocks = [];
+          let inSurge = false;
+          let surges = 0;
+
+          for (let i = 0; i < blocks.length; i++) {
+            const winStart = Math.max(0, i - 3);
+            const winEnd = Math.min(blocks.length, i + 4);
+            let maxNearbyPace = 0;
+            for (let j = winStart; j < winEnd; j++) {
+              if (blocks[j] > maxNearbyPace) maxNearbyPace = blocks[j];
+            }
+
+            // Condizione rigorosa di Fartlek:
+            // Il blocco deve essere almeno il 12% più veloce della mediana dell'uscita E avere accanto (entro 90s) un vero recupero almeno il 30% più lento!
+            const isFastRep = (blocks[i] <= maxNearbyPace * 0.77) && (blocks[i] <= overallMedian * 0.88);
+            if (isFastRep) {
+              fastBlocks.push(blocks[i]);
+              if (!inSurge) {
+                surges++;
+                inSurge = true;
+              }
+            } else {
+              inSurge = false;
+            }
+          }
+
+          // Deve avere almeno 3 distinte accelerazioni (ripetute) e almeno 4 blocchi da 30s (2 minuti totali di qualità)
+          if (surges >= 3 && fastBlocks.length >= 4) {
+            const medianRepPace = calcMedian(fastBlocks);
+            const totalFastMin = fastBlocks.length * 0.5;
+            // Conversione fisiologica da passo ripetute VO2max a passo 10k continuo (circa +9.5% / +11.5% in base ai minuti totali di spinta)
+            const convFactor = Math.max(1.095, 1.135 - Math.min(15, totalFastMin) * 0.0025);
+            const equiv10kPace = medianRepPace * convFactor;
+
+            results.push({
+              type: 'fartlek_median',
+              distM: 10000,
+              timeS: equiv10kPace * 10,
+              rawRepPaceSecKm: medianRepPace,
+              elevM: 0,
+              label: `Fartlek (${surges} rip., ${totalFastMin.toFixed(1)}' veloci @ ${formatPace(medianRepPace)}/km med.)`
+            });
+          }
+        }
+      }
+
+      return results;
+    }
+
+    async function processStravaZipArchive(zipFile, onProgress) {
+      const zip = await JSZip.loadAsync(zipFile);
+      const runs = [], crossTraining = [];
+
+      const csvEntry = Object.values(zip.files).find(f => !f.dir && /(^|\/)activities\.csv$/i.test(f.name));
+      if (csvEntry) {
+        onProgress('Lettura registro activities.csv...', 25);
+        const rows = parseCSVText(await csvEntry.async('string'));
+        if (rows.length > 1) {
+          const headers = rows[0].map(h => h.replace(/^\uFEFF/, '').replace(/['`’\u2018\u2019]/g, "'").trim().toLowerCase());
+          const fCol = kw => headers.findIndex(h => kw.some(k => h === k || h.includes(k)));
+
+          const idxType = fCol(['tipo attività', 'tipo di attività', 'activity type', 'sport']);
+          const idxDate = fCol(["data dell'attività", 'data attività', 'activity date', 'date', 'data']);
+          const idxName = fCol(['nome attività', 'activity name', 'name']);
+          const idxFile = fCol(['nome del file', 'nome file', 'filename']);
+
+          const idxDistFirst = headers.indexOf('distanza') >= 0 ? headers.indexOf('distanza') : headers.indexOf('distance');
+          const idxDistLast = headers.lastIndexOf('distanza') >= 0 ? headers.lastIndexOf('distanza') : headers.lastIndexOf('distance');
+          const idxMovTime = fCol(['tempo in movimento', 'moving time']);
+          const idxElapsedFirst = headers.indexOf('tempo trascorso') >= 0 ? headers.indexOf('tempo trascorso') : headers.indexOf('elapsed time');
+          const idxElapsedLast = headers.lastIndexOf('tempo trascorso') >= 0 ? headers.lastIndexOf('tempo trascorso') : headers.lastIndexOf('elapsed time');
+          const idxElev = fCol(['dislivello positivo', 'elevation gain']);
+          const idxHr = fCol(['frequenza cardiaca media', 'average heart rate']);
+
+          for (let r = 1; r < rows.length; r++) {
+            const cols = rows[r];
+            if (cols.length < 5) continue;
+
+            const actType = idxType >= 0 ? (cols[idxType] || '').trim() : '';
+            const actName = idxName >= 0 ? (cols[idxName] || '').trim() : 'Attività';
+            const dateMs = parseFlexibleStravaDate(idxDate >= 0 ? cols[idxDate] : '');
+            if (!dateMs) continue;
+
+            let distM = 0;
+            if (idxDistLast >= 0 && cols[idxDistLast] && idxDistLast !== idxDistFirst) {
+              const v = parseFloat(cols[idxDistLast].replace(',', '.'));
+              if (v > 0) distM = v < 200 ? v * 1000 : v;
+            }
+            if (distM === 0 && idxDistFirst >= 0 && cols[idxDistFirst]) {
+              const v = parseFloat(cols[idxDistFirst].replace(',', '.'));
+              if (v > 0) distM = v < 200 ? v * 1000 : v;
+            }
+
+            let timeS = 0;
+            if (idxMovTime >= 0 && cols[idxMovTime]) timeS = parseFloat(cols[idxMovTime].replace(',', '.'));
+            if (timeS <= 0 && idxElapsedLast >= 0 && cols[idxElapsedLast]) timeS = parseFloat(cols[idxElapsedLast].replace(',', '.'));
+            if (timeS <= 0 && idxElapsedFirst >= 0 && cols[idxElapsedFirst]) timeS = parseFloat(cols[idxElapsedFirst].replace(',', '.'));
+
+            const elevM = idxElev >= 0 ? parseFloat((cols[idxElev] || '0').replace(',', '.')) || 0 : 0;
+            const avgHr = idxHr >= 0 ? parseFloat((cols[idxHr] || '').replace(',', '.')) || 0 : 0;
+            const linkedFile = idxFile >= 0 && cols[idxFile] ? cols[idxFile].trim() : null;
+
+            if (isRunningTypeString(actType) && distM >= 400 && timeS >= 60) {
+              runs.push({
+                dateMs, name: actName, distM, timeS, elevM: Math.round(elevM),
+                avgHr: (avgHr > 60 && avgHr < 230) ? Math.round(avgHr) : null,
+                linkedFile, bestSubSegments: [], isCrossTraining: false
+              });
+            } else if (!isRunningTypeString(actType) && actType !== '' && timeS >= 600) {
+              crossTraining.push({ dateMs, type: actType, name: actName, distM, timeS });
+            }
+          }
+        }
+      }
+
+      if (runs.length > 0) {
+        const recent = runs.filter(r => r.distM >= 2000).sort((a, b) => b.dateMs - a.dateMs).slice(0, 30);
+        for (let i = 0; i < recent.length; i++) {
+          const r = recent[i];
+          if (!r.linkedFile) continue;
+          const fileEntry = Object.values(zip.files).find(f => f.name.endsWith(r.linkedFile));
+          if (!fileEntry) continue;
+          const lowName = fileEntry.name.toLowerCase();
+          if (!lowName.includes('.tcx') && !lowName.includes('.gpx')) continue;
+
+          onProgress(`Analisi segmenti e Fartlek in ${r.name}...`, 35 + (i / recent.length) * 60);
+          try {
+            const xml = lowName.endsWith('.gz')
+              ? new TextDecoder().decode(pako.inflate(await fileEntry.async('uint8array')))
+              : await fileEntry.async('string');
+            const pTrack = lowName.includes('.tcx')
+              ? parseTcxSummaryForPredictor(xml, r.linkedFile, true)
+              : parseGpxSummaryForPredictor(xml, r.linkedFile);
+            if (pTrack && pTrack.bestSubSegments?.length) r.bestSubSegments = pTrack.bestSubSegments;
+          } catch (e) {}
+        }
+      }
+
+      onProgress('Completato', 100);
+      return { runs, crossTraining };
+    }
+
+    function parseTcxSummaryForPredictor(xmlText, fileName, onlySegments = false) {
+      const parser = new DOMParser(), xml = parser.parseFromString(xmlText, 'text/xml');
+      const name = xml.querySelector('Activity > Notes')?.textContent.trim() || `Corsa (${fileName.split('/').pop().replace(/\.(tcx|gz)+$/gi, '')})`;
+
+      let isCrossTraining = false;
+      const kwds = ['calcio', 'calcetto', 'partita', 'allenamento', 'soccer'];
+      if (!onlySegments && kwds.some(k => name.toLowerCase().includes(k))) isCrossTraining = true;
+
+      const pts = xml.querySelectorAll('Trackpoint');
+      if (pts.length < 10) return null;
+
+      let firstTimeMs = null, gpsCumD = 0, tagMaxD = 0, movTimeS = 0;
+      let pTime = null, pLat = null, pLon = null, hasGpsCoords = false;
+      const stream = [], rawEle = [];
+
+      let offDist = 0, offTime = 0;
+      xml.querySelectorAll('Activity > Lap').forEach(l => {
+        offTime += parseFloat(l.querySelector('TotalTimeSeconds')?.textContent) || 0;
+        offDist += parseFloat(l.querySelector('DistanceMeters')?.textContent) || 0;
+      });
+
+      for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i];
+        const tNode = pt.querySelector('Time');
+        if (!tNode) continue;
+        const tMs = Date.parse(tNode.textContent);
+        if (isNaN(tMs)) continue;
+        if (!firstTimeMs) firstTimeMs = tMs;
+
+        const ele = parseFloat(pt.querySelector('AltitudeMeters')?.textContent);
+        if (!isNaN(ele)) rawEle.push(ele);
+
+        const dTag = parseFloat(pt.querySelector('DistanceMeters')?.textContent);
+        if (!isNaN(dTag) && dTag > tagMaxD) tagMaxD = dTag;
+
+        const lat = parseFloat(pt.querySelector('Position > LatitudeDegrees')?.textContent);
+        const lon = parseFloat(pt.querySelector('Position > LongitudeDegrees')?.textContent);
+
+        if (!isNaN(lat) && !isNaN(lon)) {
+          hasGpsCoords = true;
+          if (pTime !== null && pLat !== null && pLon !== null) {
+            const dt = (tMs - pTime) / 1000;
+            const d = haversineMeters(pLat, pLon, lat, lon);
+            if (dt > 0 && dt <= 60 && d >= 0) {
+              const speed = d / dt;
+              if (speed > 0.5 && speed < 8.5) {
+                gpsCumD += d;
+                movTimeS += dt;
+              }
+            }
+          }
+          pLat = lat;
+          pLon = lon;
+          pTime = tMs;
+          // CRITICO: Per lo stream dei punti usiamo SEMPRE la distanza continua GPS Haversine (senza mai mescolarla con gli scalini di 10s di DistanceMeters!)
+          stream.push({ cumDist: gpsCumD, cumWallTime: (tMs - firstTimeMs) / 1000, cumMovTime: movTimeS, ele: isNaN(ele) ? 0 : ele });
+        }
+      }
+
+      if (offDist < 100) offDist = hasGpsCoords ? gpsCumD : tagMaxD;
+      if (offTime < 60) offTime = movTimeS > 60 ? movTimeS : (stream[stream.length - 1]?.cumWallTime || 0);
+      if (!firstTimeMs || offDist < 400 || offTime < 60) return null;
+
+      return {
+        dateMs: firstTimeMs, name, distM: offDist, timeS: offTime, elevM: computeSmoothedElevationGain(rawEle),
+        avgHr: null, bestSubSegments: (isCrossTraining || !hasGpsCoords) ? [] : extractBestSubSegments(stream), isCrossTraining
+      };
+    }
+
+    function parseGpxSummaryForPredictor(xmlText, fileName) {
+      const parser = new DOMParser(), xml = parser.parseFromString(xmlText, 'text/xml');
+      const nameNode = xml.querySelector('trk > name') || xml.querySelector('metadata > name');
+      const name = nameNode ? nameNode.textContent.trim() : fileName.split('/').pop();
+      const trkpts = xml.querySelectorAll('trkpt');
+      if (trkpts.length < 10) return null;
+
+      let distM = 0, movingTimeS = 0, hrSum = 0, hrCount = 0;
+      let prevLat = null, prevLon = null, prevTime = null, firstTimeMs = null;
+      const streamPts = [], rawElevations = [];
+
+      for (let i = 0; i < trkpts.length; i++) {
+        const pt = trkpts[i];
+        const lat = parseFloat(pt.getAttribute('lat')), lon = parseFloat(pt.getAttribute('lon'));
+        if (isNaN(lat) || isNaN(lon)) continue;
+        const timeNode = pt.querySelector('time');
+        if (!timeNode) continue;
+        const tMs = Date.parse(timeNode.textContent.trim());
+        if (isNaN(tMs)) continue;
+        if (firstTimeMs === null) firstTimeMs = tMs;
+
+        const eleNode = pt.querySelector('ele');
+        const ele = eleNode ? parseFloat(eleNode.textContent) : NaN;
+        if (!isNaN(ele)) rawElevations.push(ele);
+
+        const hrNode = pt.getElementsByTagNameNS('*', 'hr')[0] || pt.querySelector('hr');
+        if (hrNode) {
+          const hrVal = parseFloat(hrNode.textContent);
+          if (hrVal > 60 && hrVal < 230) { hrSum += hrVal; hrCount++; }
+        }
+
+        if (prevLat !== null && prevTime !== null) {
+          const d = haversineMeters(prevLat, prevLon, lat, lon);
+          const dt = (tMs - prevTime) / 1000;
+          if (dt > 0 && dt <= 60 && (d / dt) > 0.5 && (d / dt) < 8.5) {
+            distM += d; movingTimeS += dt;
+          }
+        }
+        streamPts.push({ cumDist: distM, cumWallTime: (tMs - firstTimeMs) / 1000, cumMovTime: movingTimeS, ele: isNaN(ele) ? 0 : ele });
+        prevLat = lat; prevLon = lon; prevTime = tMs;
+      }
+
+      if (!firstTimeMs || distM < 400 || movingTimeS < 60) return null;
+      return {
+        dateMs: firstTimeMs, name, distM, timeS: movingTimeS,
+        elevM: computeSmoothedElevationGain(rawElevations),
+        avgHr: hrCount > 10 ? Math.round(hrSum / hrCount) : null,
+        bestSubSegments: extractBestSubSegments(streamPts)
+      };
+    }
+
+    // ============================================================================
+    // FORMULA VDOT & INVILUPPO DI POTENZA AEROBICA (STILE STRAVA / GARMIN)
+    // ============================================================================
+    function computeGAPSecPerKm(distM, timeS, elevGainM) {
+      const distKm = distM / 1000;
+      return Math.max(120, (timeS / distKm) - ((elevGainM / Math.max(0.5, distKm)) / 10) * 3.3);
+    }
+
+    function estimateVDOT(distMeters, timeSeconds) {
+      const tMin = timeSeconds / 60;
+      const v = distMeters / tMin;
+      return (-4.60 + 0.182258 * v + 0.000104 * (v * v)) / (0.8 + 0.1894393 * Math.exp(-0.012778 * tMin) + 0.2989558 * Math.exp(-0.1932605 * tMin));
+    }
+
+    function estimateSegmentAerobicVDOT(seg) {
+      if (seg.type === 'fartlek_median') {
+        return estimateVDOT(10000, seg.timeS);
+      }
+      if (seg.distM >= 3000) {
+        return estimateVDOT(seg.distM, seg.timeS) * 0.985;
+      }
+      const equiv5kTimeS = seg.timeS * Math.pow(5000 / seg.distM, 1.082) * 1.035;
+      return estimateVDOT(5000, equiv5kTimeS);
+    }
+
+    function solveTimeFromVDOT(distMeters, targetVdot) {
+      let low = 60, high = 36000;
+      for (let i = 0; i < 40; i++) {
+        const mid = (low + high) / 2;
+        if (estimateVDOT(distMeters, mid) > targetVdot) low = mid;
+        else high = mid;
+      }
+      return (low + high) / 2;
+    }
+
+    function recomputePredictionsFromLoaded() {
+      if (!allParsedRuns.length) return;
+      const winDays = parseInt(document.getElementById('predWindowDays').value, 10) || 90;
+      const hlDays = parseInt(document.getElementById('predHalfLifeDays').value, 10) || 35;
+      const userMaxHr = parseFloat(document.getElementById('predMaxHrInput').value) || 195;
+
+      const newestDateMs = allParsedRuns[0].dateMs;
+      const cutoffMs = newestDateMs - winDays * 86400 * 1000;
+
+      let recentRuns = allParsedRuns.filter(r => r.dateMs >= cutoffMs);
+      if (recentRuns.length < 2) recentRuns = allParsedRuns.slice(0, 15);
+
+      const runLast6w = allParsedRuns.filter(r => r.dateMs >= newestDateMs - 42 * 86400000);
+      const weeklyKmRun = runLast6w.reduce((a, r) => a + r.distM / 1000, 0) / 6;
+
+      const crossLast6w = allCrossTraining.filter(c => c.dateMs >= newestDateMs - 42 * 86400000);
+      let crossEqKm = 0;
+      crossLast6w.forEach(c => {
+        if (c.distM > 0) crossEqKm += (c.distM / 1000) * 0.65;
+        else crossEqKm += (c.timeS / 3600) * 6.0 * 0.65;
+      });
+      const crossWeeklyEqKm = crossEqKm / 6;
+
+      const longestRunKm = recentRuns.length ? Math.max(...recentRuns.map(r => r.distM / 1000)) : 0;
+      let runsWithHr = 0;
+
+      const enriched = recentRuns.map(r => {
+        const daysAgoExact = Math.max(0, (newestDateMs - r.dateMs) / 86400000);
+        const daysAgo = Math.round(daysAgoExact);
+        const weight = Math.pow(0.5, daysAgoExact / hlDays);
+        const isShortWarmup = r.distM < 2000;
+
+        const gapSecKm = computeGAPSecPerKm(r.distM, r.timeS, r.elevM);
+        const fullRunVdot = estimateVDOT(r.distM, gapSecKm * (r.distM / 1000));
+        let peakVdot = fullRunVdot;
+        let bestSegLbl = null, effGapSecKm = gapSecKm;
+
+        if (!isShortWarmup && r.bestSubSegments?.length) {
+          for (const seg of r.bestSubSegments) {
+            if (r.distM >= 8000 && fullRunVdot >= 44.0 && seg.type === 'continuous' && seg.distM < 3000) continue;
+
+            const segVdot = estimateSegmentAerobicVDOT(seg);
+            if (segVdot > peakVdot * 1.015) {
+              peakVdot = segVdot;
+              bestSegLbl = seg.label;
+              effGapSecKm = seg.type === 'fartlek_median' ? (seg.timeS / 10) : (seg.timeS / (seg.distM / 1000));
+            }
+          }
+        }
+
+        if (!isShortWarmup && r.avgHr && userMaxHr >= 140) {
+          runsWithHr++;
+          const hrRatio = r.avgHr / userMaxHr;
+          if (hrRatio >= 0.65 && hrRatio <= 0.91) {
+            const boost = 1 + (0.91 - hrRatio) * 0.35;
+            peakVdot *= Math.min(1.08, Math.max(1.0, boost));
+          }
+        }
+
+        const decay = Math.max(0.86, 1 - Math.max(0, daysAgoExact - 21) * (0.035 / hlDays));
+        return {
+          ...r, isShortWarmup, daysAgo, recencyWeight: weight,
+          paceSecKm: r.timeS / (r.distM / 1000), gapSecKm,
+          effectiveGapSecKm: effGapSecKm, bestSegmentLabel: bestSegLbl,
+          vdot: peakVdot,
+          recencyAdjustedVdot: isShortWarmup ? 0 : peakVdot * decay
+        };
+      });
+
+      const qualifying = enriched.filter(r => !r.isShortWarmup).sort((a, b) => b.recencyAdjustedVdot - a.recencyAdjustedVdot);
+      if (qualifying.length === 0) return;
+
+      const bestRun = qualifying[0];
+      const peakBaseVdot = bestRun.recencyAdjustedVdot || bestRun.vdot;
+
+      const supportEfforts = [];
+      for (let i = 1; i < Math.min(5, qualifying.length); i++) {
+        if (qualifying[i].recencyAdjustedVdot >= peakBaseVdot * 0.85) {
+          supportEfforts.push(qualifying[i]);
+        }
+      }
+
+      let consistencyBonus = 0;
+      supportEfforts.forEach(r => {
+        const ratio = r.recencyAdjustedVdot / peakBaseVdot;
+        consistencyBonus += 0.0022 * ratio * (0.5 + 0.5 * r.recencyWeight);
+      });
+      if ((weeklyKmRun + crossWeeklyEqKm) >= 18) {
+        consistencyBonus += Math.min(0.004, ((weeklyKmRun + crossWeeklyEqKm) - 18) * 0.00025);
+      }
+      consistencyBonus = Math.min(0.015, consistencyBonus);
+
+      const effectiveVDOT = peakBaseVdot * (1 + consistencyBonus);
+      const base10kTimeS = solveTimeFromVDOT(10000, effectiveVDOT);
+
+      let fatigueExp = 1.06 + Math.max(0, (45 - (weeklyKmRun + crossWeeklyEqKm)) * 0.0005);
+      fatigueExp = Math.min(1.09, Math.max(1.055, fatigueExp));
+
+      currentPredModel = { effectiveVDOT, base10kTimeS, fatigueExp, weeklyKmRun, crossWeeklyEqKm, longestRunKm };
+
+      const setEl = (id, txt) => { if (document.getElementById(id)) document.getElementById(id).textContent = txt; };
+      const setHtml = (id, html) => { if (document.getElementById(id)) document.getElementById(id).innerHTML = html; };
+
+      const bonusPctStr = (consistencyBonus * 100).toFixed(1);
+      setEl('predMethodBadge', runsWithHr > 0 ? `Picco + Mediana Fartlek (+${bonusPctStr}%) + Cardio` : `Picco + Mediana Fartlek (+${bonusPctStr}%) + Calcio 65%`);
+      setEl('predMethodTitle', `Analisi su ${recentRuns.length} corse + ${crossLast6w.length} attività di Calcio/Altro`);
+      setEl('predMethodDesc', `Stima ancorata al tuo Picco Certificato (${bestRun.name}, VDOT ${peakBaseVdot.toFixed(1)}) potenziato di un +${bonusPctStr}% grazie ai tuoi ${supportEfforts.length} migliori allenamenti di qualità/Fartlek e al volume settimanale (${(weeklyKmRun + crossWeeklyEqKm).toFixed(1)} km/s eq.).`);
+
+      setEl('predVdotVal', effectiveVDOT.toFixed(1));
+      setEl('predFatigueExp', fatigueExp.toFixed(3));
+      setEl('predRunsCount', recentRuns.length.toString());
+      setEl('predDateRangeSub', `Dal ${new Date(recentRuns[recentRuns.length - 1].dateMs).toLocaleDateString('it-IT')} al ${new Date(newestDateMs).toLocaleDateString('it-IT')}`);
+
+      setHtml('predWeeklyKm', `${(weeklyKmRun + crossWeeklyEqKm).toFixed(1)} <span class="text-xs font-normal text-slate-500">km/s eq.</span>`);
+      setEl('predWeeklySub', `Corsa: ${weeklyKmRun.toFixed(1)} km/s + Calcio (65%): ${crossWeeklyEqKm.toFixed(1)} km/s`);
+      setHtml('predLongestRun', `${longestRunKm.toFixed(1)} <span class="text-xs font-normal text-slate-500">km</span>`);
+      setHtml('predBestGap', `${formatPace(bestRun.effectiveGapSecKm)} <span class="text-xs font-normal text-slate-500">/km</span>`);
+      setEl('predBestGapSub', `${bestRun.name} (${(bestRun.distM / 1000).toFixed(2)} km)`);
+
+      const updatePred = (distM, elTime, elPace, elNote) => {
+        let tS = base10kTimeS * Math.pow(distM / 10000, fatigueExp);
+        let note = `Basato su VDOT ${effectiveVDOT.toFixed(1)} su percorso pianeggiante`;
+        if (distM > 15000 && longestRunKm < (distM / 1000) * 0.68) {
+          tS *= 1 + Math.min(0.08, (((distM / 1000) * 0.68 - longestRunKm) / (distM / 1000)) * 0.14);
+          note = `Include margine prudenziale (lungo max: ${longestRunKm.toFixed(1)} km)`;
+        }
+        setEl(elTime, formatDuration(tS, tS >= 3600));
+        setEl(elPace, `${formatPace(tS / (distM / 1000))} /km`);
+        setEl(elNote, note);
+      };
+
+      updatePred(5000, 'predTime5k', 'predPace5k', 'predNote5k');
+      updatePred(10000, 'predTime10k', 'predPace10k', 'predNote10k');
+      updatePred(21097.5, 'predTime21k', 'predPace21k', 'predNote21k');
+      updatePred(42195, 'predTime42k', 'predPace42k', 'predNote42k');
+      updateCustomDistancePrediction();
+
+      const supportSet = new Set(supportEfforts.map(r => r.dateMs + '_' + r.distM));
+      const bestKey = bestRun.dateMs + '_' + bestRun.distM;
+
+      const tBody = document.getElementById('predictorRunsTableBody');
+      if (tBody) {
+        tBody.innerHTML = enriched.map(r => {
+          const rKey = r.dateMs + '_' + r.distM;
+          const isBest = rKey === bestKey;
+          const isSupport = supportSet.has(rKey);
+
+          let role = '';
+          if (isBest) {
+            role = `<span class="inline-flex items-center gap-1 bg-emerald-600 text-white px-2 py-0.5 rounded-md font-extrabold text-[10px]">🏆 Picco Base VDOT (100%)</span>`;
+          } else if (isSupport) {
+            role = `<span class="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-extrabold text-[10px]">🔥 Bonus Qualità / Fartlek</span>`;
+          } else if (r.isShortWarmup) {
+            role = `<span class="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold text-[10px]">📦 Solo Volume (&lt;2km)</span>`;
+          } else {
+            role = `<span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-semibold text-[10px]">📦 Solo Volume Settimanale</span>`;
+          }
+
+          return `<tr class="${isBest ? 'bg-emerald-50' : (isSupport ? 'bg-emerald-50/40' : 'hover:bg-slate-50 opacity-75')}">
+            <td class="py-2 px-2 text-slate-600 whitespace-nowrap">${new Date(r.dateMs).toLocaleDateString('it-IT')} <span class="text-[10px] text-slate-400">(-${r.daysAgo}g)</span></td>
+            <td class="py-2 px-2 font-bold text-slate-800">${r.name}${r.bestSegmentLabel ? `<div class="text-[11px] font-semibold text-emerald-600 mt-0.5">⚡ ${r.bestSegmentLabel}</div>` : ''}</td>
+            <td class="py-2 px-2 font-semibold text-slate-700">${(r.distM / 1000).toFixed(2)} km</td>
+            <td class="py-2 px-2 text-slate-600">${formatDuration(r.timeS)}</td>
+            <td class="py-2 px-2 text-slate-600">${formatPace(r.paceSecKm)} /km</td>
+            <td class="py-2 px-2 text-slate-500">+${r.elevM}m</td>
+            <td class="py-2 px-2 font-bold text-emerald-700">${formatPace(r.effectiveGapSecKm)} /km</td>
+            <td class="py-2 px-2 text-slate-500">${r.avgHr ? r.avgHr + ' bpm' : '—'}</td>
+            <td class="py-2 px-2 font-extrabold text-slate-800">${r.isShortWarmup ? '—' : r.recencyAdjustedVdot.toFixed(1)}</td>
+            <td class="py-2 px-2 whitespace-nowrap">${role}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
+    function updateCustomDistancePrediction() {
+      if (!currentPredModel) return;
+      const inputEl = document.getElementById('customRaceDistInput');
+      const unitEl = document.getElementById('customRaceUnitSelect');
+      if (!inputEl || !unitEl) return;
+      const v = parseFloat(inputEl.value) || 5.5, m = unitEl.value === 'km' ? v * 1000 : v;
+      if (m <= 100) return;
+      let tS = currentPredModel.base10kTimeS * Math.pow(m / 10000, currentPredModel.fatigueExp);
+      if (document.getElementById('predTimeCustom')) document.getElementById('predTimeCustom').textContent = formatDuration(tS, tS >= 3600);
+      if (document.getElementById('predPaceCustom')) document.getElementById('predPaceCustom').textContent = `${formatPace(tS / (m / 1000))} /km`;
+    }
+    // ============================================================================
+    // SUPPORTO DRAG & DROP PER ENTRAMBI I TOOL
+    // ============================================================================
+    function setupDragAndDropZones() {
+      const bindDropZone = (element, fileInputId) => {
+        if (!element) return;
+        ['dragenter', 'dragover'].forEach(evtName => {
+          element.addEventListener(evtName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            element.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50/40');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(evtName => {
+          element.addEventListener(evtName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            element.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50/40');
+          });
+        });
+
+        element.addEventListener('drop', (e) => {
+          const files = e.dataTransfer?.files;
+          if (!files || !files.length) return;
+          const fileInput = document.getElementById(fileInputId);
+          if (!fileInput) return;
+          fileInput.files = files;
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      };
+
+      // 1. Zone Drag & Drop per Modalità Singolo GPX (sia il box tratteggiato sia l'intero contenitore)
+      bindDropZone(document.getElementById('singleEmptyState'), 'gpxFileInput');
+      bindDropZone(document.getElementById('modeSingleContainer'), 'gpxFileInput');
+
+      // 2. Zone Drag & Drop per Modalità Proiezioni Gara (sia il box tratteggiato sia l'intero contenitore)
+      bindDropZone(document.getElementById('predictorEmptyState'), 'stravaArchiveInput');
+      bindDropZone(document.getElementById('modePredictorContainer'), 'stravaArchiveInput');
+    }
+
+    setupDragAndDropZones();
+  </script>
+</body>
+</html>
